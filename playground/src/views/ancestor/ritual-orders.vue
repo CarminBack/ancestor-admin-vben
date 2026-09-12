@@ -1,0 +1,1133 @@
+<script setup lang="ts">
+import { ref, reactive, onMounted, h } from 'vue';
+import { Page } from '@vben/common-ui';
+import {
+  Card,
+  Table,
+  Button,
+  Input,
+  Select,
+  Space,
+  Tag,
+  Modal,
+  Descriptions,
+  DescriptionsItem,
+  Steps,
+  Timeline,
+  TimelineItem,
+  Upload,
+  message,
+  DatePicker,
+} from 'antdv-next';
+import { ancestorApi, type RitualOrder, type RitualOrderDetail, RitualStatus } from '#/api/ancestor';
+import { getQiniuToken, uploadToQiniu } from '#/utils/qiniu';
+import OrderDetailModal from './components/OrderDetailModal.vue';
+
+// 图标组件
+const PlayCircleOutlined = () => h('span', { class: 'i-ant-design:play-circle-outlined' });
+const ClockCircleOutlined = () => h('span', { class: 'i-ant-design:clock-circle-outlined' });
+const DeleteOutlined = () => h('span', { class: 'i-ant-design:delete-outlined' });
+const VideoCameraOutlined = () => h('span', { class: 'i-ant-design:video-camera-outlined' });
+
+const loading = ref(false);
+const orders = ref<RitualOrder[]>([]);
+const total = ref(0);
+const detailVisible = ref(false);
+const currentOrder = ref<RitualOrderDetail>();
+const uploadVisible = ref(false);
+const uploadingOrder = ref<RitualOrder>();
+const uploadProgress = ref(0);
+const uploading = ref(false);
+const fileList = ref<any[]>([]);
+const videoTimeVisible = ref(false);
+const currentVideo = ref<any>(null);
+const videoAvailableTime = ref<string>('');
+const videoPlayerVisible = ref(false);
+const currentVideoUrl = ref<string>('');
+
+const searchForm = reactive({
+  orderNo: '',
+  orderName: '',
+  deceasedName: '',
+  status: undefined as string | undefined,
+  ritualDate: undefined as string | undefined,
+});
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+});
+
+const columns = [
+  { title: '订单编号', dataIndex: 'orderNo', key: 'orderNo', width: 150 },
+  { title: '下单人', dataIndex: 'orderName', key: 'orderName', width: 100 },
+  { title: '亡故亲人', dataIndex: 'deceasedName', key: 'deceasedName', width: 100 },
+  { title: '祭祀套餐', dataIndex: 'packageName', key: 'packageName', width: 120 },
+  { title: '祭祀日期', dataIndex: 'ritualDate', key: 'ritualDate', width: 120 },
+  { title: '金额', dataIndex: 'amount', key: 'amount', width: 100 },
+  { title: '状态', key: 'status', width: 120 },
+  { title: '视频', key: 'videoCount', width: 80 },
+  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
+  { title: '操作', key: 'action', width: 260, fixed: 'right' },
+];
+
+const statusColorMap: Record<string, string> = {
+  PENDING_PAYMENT: 'default',
+  PAID: 'blue',
+  PENDING_RITUAL: 'cyan',
+  PREPARING: 'orange',
+  PACKAGING: 'orange',
+  BURNING: 'orange',
+  PENDING_VIDEO: 'purple',
+  COMPLETED: 'green',
+  CANCELLED: 'red',
+};
+
+const statusTextMap: Record<string, string> = {
+  PENDING_PAYMENT: '待支付',
+  PAID: '已支付',
+  PENDING_RITUAL: '待祭祀',
+  PREPARING: '准备中',
+  PACKAGING: '封包中',
+  BURNING: '焚化中',
+  PENDING_VIDEO: '待上传视频',
+  COMPLETED: '已完成',
+  CANCELLED: '已取消',
+};
+
+const statusSteps = [
+  { status: 'PAID', title: '已支付' },
+  { status: 'PREPARING', title: '准备中' },
+  { status: 'PACKAGING', title: '封包中' },
+  { status: 'BURNING', title: '焚化中' },
+  { status: 'PENDING_VIDEO', title: '待上传视频' },
+  { status: 'COMPLETED', title: '已完成' },
+];
+
+const getStepStatus = (currentStatus: string, stepStatus: string) => {
+  const currentIndex = statusSteps.findIndex((s) => s.status === currentStatus);
+  const stepIndex = statusSteps.findIndex((s) => s.status === stepStatus);
+
+  if (currentStatus === 'CANCELLED') return 'error';
+  if (currentIndex === stepIndex) return 'process';
+  if (currentIndex > stepIndex) return 'finish';
+  return 'wait';
+};
+
+const getCurrentStep = (status: string) => {
+  const index = statusSteps.findIndex((s) => s.status === status);
+  return index >= 0 ? index : 0;
+};
+
+const fetchOrders = async () => {
+  loading.value = true;
+  try {
+    const res = await ancestorApi.ritualOrders({
+      ...searchForm,
+      page: pagination.current,
+      pageSize: pagination.pageSize,
+    });
+    orders.value = res.items;
+    total.value = res.total;
+    console.log('订单列表已加载，第一个订单状态:', orders.value[0]?.status);
+  } catch (error) {
+    console.error('获取订单列表失败:', error);
+    message.error('获取订单列表失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleSearch = () => {
+  pagination.current = 1;
+  fetchOrders();
+};
+
+const handleReset = () => {
+  searchForm.orderNo = '';
+  searchForm.orderName = '';
+  searchForm.deceasedName = '';
+  searchForm.status = undefined;
+  searchForm.ritualDate = undefined;
+  pagination.current = 1;
+  fetchOrders();
+};
+
+const handleTableChange = (pag: any) => {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+  fetchOrders();
+};
+
+const handleViewDetail = async (record: RitualOrder) => {
+  try {
+    const res = await ancestorApi.getRitualOrder(record.id);
+    currentOrder.value = res;
+    detailVisible.value = true;
+  } catch (error) {
+    console.error('获取订单详情失败:', error);
+    message.error('获取订单详情失败');
+  }
+};
+
+const handleUpdateStatus = (orderId: string, newStatus: string) => {
+  Modal.confirm({
+    title: '确认状态变更',
+    content: `确定要将订单状态更新为"${statusTextMap[newStatus]}"吗？`,
+    onOk: async () => {
+      try {
+        await ancestorApi.updateRitualOrder(orderId, { status: newStatus as RitualStatus });
+        message.success('状态更新成功');
+        if (currentOrder.value) {
+          const res = await ancestorApi.getRitualOrder(orderId);
+          currentOrder.value = res;
+        }
+        fetchOrders();
+      } catch (error) {
+        console.error('状态更新失败:', error);
+        message.error('状态更新失败');
+      }
+    },
+  });
+};
+
+const getNextStatus = (currentStatus: string): string | null => {
+  const statusFlow: Record<string, string> = {
+    PAID: 'PREPARING',
+    PREPARING: 'PACKAGING',
+    PACKAGING: 'BURNING',
+    BURNING: 'COMPLETED',
+  };
+  return statusFlow[currentStatus] || null;
+};
+
+// 获取上传视频按钮文本
+const getUploadButtonText = (status: string): string => {
+  const textMap: Record<string, string> = {
+    PREPARING: '上传准备视频',
+    PACKAGING: '上传封包视频',
+    BURNING: '上传祭祀视频',
+  };
+  return textMap[status] || '上传视频';
+};
+
+// 判断是否显示上传视频按钮
+const shouldShowUploadButton = (status: string): boolean => {
+  return ['PAID', 'PREPARING', 'PACKAGING', 'BURNING'].includes(status);
+};
+
+// 上传视频
+const handleUploadVideo = (record: RitualOrder) => {
+  // 根据订单当前状态设置上传阶段
+  uploadStage.value = record.status;
+  uploadingOrder.value = record;
+  uploadVisible.value = true;
+  fileList.value = [];
+  uploadProgress.value = 0;
+};
+
+// 按阶段上传视频（从详情页调用）
+const uploadStage = ref<string>('');
+const handleUploadVideoByStage = (stage: string) => {
+  if (!currentOrder.value) return;
+
+  uploadStage.value = stage;
+  uploadingOrder.value = currentOrder.value as any;
+  uploadVisible.value = true;
+  fileList.value = [];
+  uploadProgress.value = 0;
+};
+
+// 自定义上传处理
+const customRequest = async (options: any) => {
+  const { file, onProgress, onSuccess, onError } = options;
+
+  try {
+    uploading.value = true;
+    console.log('开始上传视频:', file.name, file.size);
+
+    // 获取上传凭证和配置
+    console.log('正在获取七牛云上传凭证...');
+    const config = await getQiniuToken();
+    console.log('获取到七牛云配置:', config);
+
+    // 上传到七牛云
+    console.log('开始上传到七牛云...');
+    const videoUrl = await uploadToQiniu(file, config, (progress) => {
+      uploadProgress.value = progress.percent;
+      onProgress({ percent: progress.percent });
+    });
+    console.log('上传成功，视频URL:', videoUrl);
+
+    // 调用后端 API 保存视频记录，标记视频所属阶段
+    const videoData = {
+      videoUrl: videoUrl,
+      stage: uploadStage.value || uploadingOrder.value!.status, // 优先使用指定阶段，否则使用订单状态
+    };
+
+    await ancestorApi.addRitualOrderVideo(uploadingOrder.value!.id, videoData);
+    console.log('保存视频记录成功:', videoData);
+
+    onSuccess(videoUrl);
+    message.success('视频上传成功');
+    uploading.value = false;
+
+    // 重置上传列表，允许继续上传
+    fileList.value = [];
+    uploadProgress.value = 0;
+
+  } catch (error: any) {
+    console.error('视频上传失败:', error);
+    console.error('错误详情:', {
+      message: error?.message,
+      stack: error?.stack,
+      response: error?.response,
+      data: error?.data,
+    });
+    onError(error);
+    const errorMsg = error?.message || error?.toString() || '视频上传失败';
+    message.error(`视频上传失败: ${errorMsg}`);
+    uploading.value = false;
+  }
+};
+
+// 文件选择前的验证
+const beforeUpload = (file: File) => {
+  const isVideo = file.type.startsWith('video/');
+  if (!isVideo) {
+    message.error('只能上传视频文件！');
+    return false;
+  }
+
+  const isLt500M = file.size / 1024 / 1024 < 500;
+  if (!isLt500M) {
+    message.error('视频大小不能超过 500MB！');
+    return false;
+  }
+
+  return true;
+};
+
+// 关闭上传弹窗
+const handleCloseUpload = () => {
+  if (uploading.value) {
+    message.warning('视频正在上传中，请稍候...');
+    return;
+  }
+  uploadVisible.value = false;
+  fileList.value = [];
+  uploadProgress.value = 0;
+  uploadStage.value = '';
+};
+
+// 按类型过滤视频
+const getVideosByType = (type: string) => {
+  if (!currentOrder.value?.videos) return [];
+  return currentOrder.value.videos.filter(video => video.stage === type);
+};
+
+// 自动更新订单状态
+const autoUpdateOrderStatus = async () => {
+  if (!uploadingOrder.value) return;
+
+  try {
+    console.log('=== 自动更新订单状态 ===');
+
+    // 重新加载订单详情，获取最新的视频数量
+    const orderDetail = await ancestorApi.getRitualOrder(uploadingOrder.value.id);
+    console.log('获取到的订单详情:', orderDetail);
+
+    // 判断应该处于哪个状态
+    const hasPreparingVideo = orderDetail.videos?.some(v => v.stage === 'PREPARING');
+    const hasPackagingVideo = orderDetail.videos?.some(v => v.stage === 'PACKAGING');
+    const hasBurningVideo = orderDetail.videos?.some(v => v.stage === 'BURNING');
+
+    console.log('准备视频:', hasPreparingVideo);
+    console.log('封包视频:', hasPackagingVideo);
+    console.log('祭祀视频:', hasBurningVideo);
+    console.log('当前 uploadStage.value:', uploadStage.value);
+
+    let targetStatus = 'PREPARING'; // 默认状态
+    let statusMessage = '';
+
+    // 根据刚上传的视频阶段判断应该进入的下一个状态
+    if (uploadStage.value === 'BURNING' || hasBurningVideo) {
+      // 如果三个阶段都有视频，完成订单
+      if (hasBurningVideo && hasPackagingVideo && hasPreparingVideo) {
+        console.log('三个阶段都有视频，询问是否完成订单');
+
+        Modal.confirm({
+          title: '确认完成祭祀',
+          content: '已上传所有阶段的视频，确认后订单将标记为已完成并移入祭祀记录。是否确认？',
+          okText: '确认完成',
+          cancelText: '暂不完成',
+          onOk: async () => {
+            await ancestorApi.updateRitualOrder(uploadingOrder.value!.id, {
+              status: 'COMPLETED' as RitualStatus,
+            });
+            message.success('祭祀已完成，订单已移入祭祀记录');
+            uploadVisible.value = false;
+            uploadStage.value = '';
+            await fetchOrders();
+            detailVisible.value = false;
+          },
+          onCancel: async () => {
+            // 更新状态到 BURNING
+            await ancestorApi.updateRitualOrder(uploadingOrder.value!.id, {
+              status: 'BURNING' as RitualStatus,
+            });
+            message.success('状态已更新为：焚烧中');
+            uploadVisible.value = false;
+            uploadStage.value = '';
+            await fetchOrders();
+            if (currentOrder.value) {
+              const res = await ancestorApi.getRitualOrder(uploadingOrder.value!.id);
+              currentOrder.value = res;
+            }
+          },
+        });
+        return;
+      }
+
+      targetStatus = 'BURNING';
+      statusMessage = '焚烧中';
+    } else if (uploadStage.value === 'PACKAGING') {
+      // 上传了封包视频，进入焚烧阶段
+      targetStatus = 'BURNING';
+      statusMessage = '焚烧中';
+    } else if (uploadStage.value === 'PREPARING') {
+      // 上传了准备视频，进入封包阶段
+      targetStatus = 'PACKAGING';
+      statusMessage = '封包中';
+    }
+
+    console.log('目标状态:', targetStatus);
+
+    // 弹窗确认进入下一步
+    Modal.confirm({
+      title: '确认进入下一步',
+      content: `视频上传完成，是否进入下一步：${statusMessage}？`,
+      okText: '确认',
+      cancelText: '稍后',
+      onOk: async () => {
+        // 更新订单状态到目标状态
+        console.log('更新订单状态到:', targetStatus);
+        await ancestorApi.updateRitualOrder(uploadingOrder.value!.id, {
+          status: targetStatus as RitualStatus,
+        });
+        console.log('状态更新成功');
+
+        message.success(`状态已更新为：${statusMessage}`);
+
+        uploadVisible.value = false;
+        uploadStage.value = '';
+
+        // 刷新订单列表
+        await fetchOrders();
+        console.log('订单列表已刷新');
+        console.log('第一个订单的新状态:', orders.value[0]?.status);
+
+        // 如果是在详情页，刷新详情
+        if (currentOrder.value) {
+          const res = await ancestorApi.getRitualOrder(uploadingOrder.value!.id);
+          currentOrder.value = res;
+          console.log('详情已刷新:', res);
+        }
+      },
+      onCancel: () => {
+        uploadVisible.value = false;
+        uploadStage.value = '';
+        fetchOrders();
+        if (currentOrder.value) {
+          ancestorApi.getRitualOrder(uploadingOrder.value!.id).then(res => {
+            currentOrder.value = res;
+          });
+        }
+      },
+    });
+  } catch (error) {
+    console.error('自动更新状态失败:', error);
+    message.error('更新状态失败');
+  }
+};
+
+// 确认上传完成
+const handleConfirmUpload = async () => {
+  await autoUpdateOrderStatus();
+};
+
+// 查看视频 - 弹窗播放
+const handleViewVideo = async (videoUrl: string) => {
+  currentVideoUrl.value = videoUrl;
+  videoPlayerVisible.value = true;
+};
+
+// 判断视频是否可查看
+const isVideoAvailable = (video: any) => {
+  if (!video.availableAt) return true;
+  return new Date(video.availableAt) <= new Date();
+};
+
+// 格式化剩余时间
+const formatAvailableTime = (availableAt?: string) => {
+  if (!availableAt) return '';
+  const now = new Date();
+  const target = new Date(availableAt);
+  const diff = target.getTime() - now.getTime();
+
+  if (diff <= 0) return '已可查看';
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (days > 0) return `${days}天${hours}小时`;
+  if (hours > 0) return `${hours}小时${minutes}分钟`;
+  return `${minutes}分钟`;
+};
+
+// 设置视频可查看时间
+const handleSetVideoTime = (video: any) => {
+  currentVideo.value = video;
+  videoAvailableTime.value = video.availableAt || '';
+  videoTimeVisible.value = true;
+};
+
+// 保存视频可查看时间
+const handleSaveVideoTime = async () => {
+  try {
+    if (!videoAvailableTime.value) {
+      message.error('请选择可查看时间');
+      return;
+    }
+
+    // 格式化时间为 YYYY-MM-DD HH:mm:ss
+    let formattedTime = '';
+    if (videoAvailableTime.value instanceof Date) {
+      const date = videoAvailableTime.value;
+      formattedTime = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+    } else if (typeof videoAvailableTime.value === 'string') {
+      formattedTime = videoAvailableTime.value;
+    } else {
+      // dayjs 对象
+      formattedTime = videoAvailableTime.value.format('YYYY-MM-DD HH:mm:ss');
+    }
+
+    // TODO: 调用后端 API 更新视频可查看时间
+    // await ancestorApi.updateVideoAvailableTime(currentVideo.value.id, formattedTime);
+
+    // 临时更新本地数据
+    if (currentOrder.value?.videos) {
+      const video = currentOrder.value.videos.find(v => v.id === currentVideo.value.id);
+      if (video) {
+        video.availableAt = formattedTime;
+      }
+    }
+
+    message.success('设置成功');
+    videoTimeVisible.value = false;
+    currentVideo.value = null;
+    videoAvailableTime.value = '';
+  } catch (error) {
+    console.error('设置失败:', error);
+    message.error('设置失败');
+  }
+};
+
+// 删除视频
+const handleDeleteVideo = (video: any) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除该视频吗？删除后无法恢复。`,
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        // TODO: 调用后端 API 删除视频
+        // await ancestorApi.deleteVideo(video.id);
+
+        // 临时更新本地数据
+        if (currentOrder.value?.videos) {
+          const index = currentOrder.value.videos.findIndex(v => v.id === video.id);
+          if (index > -1) {
+            currentOrder.value.videos.splice(index, 1);
+            currentOrder.value.videoCount = currentOrder.value.videos.length;
+          }
+        }
+
+        message.success('删除成功');
+        await fetchOrders();
+      } catch (error) {
+        console.error('删除失败:', error);
+        message.error('删除失败');
+      }
+    },
+  });
+};
+
+// 取消祭祀
+const handleCancelRitual = (record: RitualOrder) => {
+  Modal.confirm({
+    title: '确认取消祭祀',
+    content: `确定要取消订单"${record.orderNo}"的祭祀吗？取消后将从待祭祀列表中移除。`,
+    okText: '确认取消',
+    okType: 'danger',
+    cancelText: '我再想想',
+    onOk: async () => {
+      try {
+        await ancestorApi.updateRitualOrder(record.id, { status: RitualStatus.CANCELLED });
+        message.success('已取消祭祀');
+        fetchOrders();
+      } catch (error) {
+        console.error('取消失败:', error);
+        message.error('取消失败');
+      }
+    },
+  });
+};
+
+onMounted(() => {
+  fetchOrders();
+});
+</script>
+
+<template>
+  <Page title="代祭祀订单">
+    <Card :bordered="false">
+      <!-- 搜索区域 -->
+      <div class="search-form">
+        <Space :size="16" wrap>
+          <div class="search-item">
+            <label>订单编号</label>
+            <Input
+              v-model:value="searchForm.orderNo"
+              placeholder="请输入订单编号"
+              style="width: 180px"
+              @press-enter="handleSearch"
+            />
+          </div>
+          <div class="search-item">
+            <label>下单人</label>
+            <Input
+              v-model:value="searchForm.orderName"
+              placeholder="请输入下单人姓名"
+              style="width: 150px"
+              @press-enter="handleSearch"
+            />
+          </div>
+          <div class="search-item">
+            <label>亡故亲人</label>
+            <Input
+              v-model:value="searchForm.deceasedName"
+              placeholder="请输入亡故亲人姓名"
+              style="width: 150px"
+              @press-enter="handleSearch"
+            />
+          </div>
+          <div class="search-item">
+            <label>订单状态</label>
+            <Select
+              v-model:value="searchForm.status"
+              placeholder="请选择状态"
+              style="width: 140px"
+              allow-clear
+            >
+              <Select.Option value="">全部</Select.Option>
+              <Select.Option value="PAID">已支付</Select.Option>
+              <Select.Option value="PREPARING">准备中</Select.Option>
+              <Select.Option value="PACKAGING">封包中</Select.Option>
+              <Select.Option value="BURNING">焚化中</Select.Option>
+              <Select.Option value="PENDING_VIDEO">待上传视频</Select.Option>
+              <Select.Option value="COMPLETED">已完成</Select.Option>
+            </Select>
+          </div>
+          <Button type="primary" @click="handleSearch">搜索</Button>
+          <Button @click="handleReset">重置</Button>
+        </Space>
+      </div>
+
+      <!-- 表格 -->
+      <Table
+        :columns="columns"
+        :data-source="orders"
+        :loading="loading"
+        :pagination="{
+          current: pagination.current,
+          pageSize: pagination.pageSize,
+          total: total,
+          showSizeChanger: true,
+          showTotal: (total: number) => `共 ${total} 条`,
+        }"
+        :scroll="{ x: 1400 }"
+        class="mt-4"
+        @change="handleTableChange"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'amount'">
+            <span class="price">¥{{ record.amount }}</span>
+          </template>
+          <template v-if="column.key === 'status'">
+            <Tag :color="statusColorMap[record.status]">
+              {{ statusTextMap[record.status] || record.status }}
+            </Tag>
+          </template>
+          <template v-if="column.key === 'videoCount'">
+            <Tag v-if="record.videoCount > 0" color="green">{{ record.videoCount }} 个</Tag>
+            <Tag v-else color="default">未上传</Tag>
+          </template>
+          <template v-if="column.key === 'action'">
+            <Space>
+              <Button
+                v-if="shouldShowUploadButton(record.status)"
+                type="primary"
+                size="small"
+                @click="handleUploadVideo(record)"
+              >
+                {{ getUploadButtonText(record.status) }}
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                @click="handleViewDetail(record)"
+              >
+                查看详情
+              </Button>
+            </Space>
+          </template>
+        </template>
+      </Table>
+    </Card>
+
+    <!-- 订单详情弹窗 - 使用共享组件 -->
+    <OrderDetailModal
+      v-model:visible="detailVisible"
+      :order="currentOrder"
+      :show-operations="true"
+      :show-upload-buttons="true"
+      @upload-video="handleUploadVideoByStage"
+      @view-video="handleViewVideo"
+      @set-video-time="handleSetVideoTime"
+      @delete-video="handleDeleteVideo"
+      @cancel-ritual="handleCancelRitual"
+    />
+
+    <!-- 视频上传弹窗 -->
+    <Modal
+      v-model:open="uploadVisible"
+      :title="uploadingOrder ? getUploadButtonText(uploadingOrder.status) : '上传视频'"
+      :width="600"
+      :closable="!uploading"
+      :maskClosable="!uploading"
+      @cancel="handleCloseUpload"
+    >
+      <div class="upload-container">
+        <Upload
+          v-model:file-list="fileList"
+          :custom-request="customRequest"
+          :before-upload="beforeUpload"
+          accept="video/*"
+          list-type="picture-card"
+          :disabled="uploading"
+        >
+          <div v-if="!uploading">
+            <div style="margin-top: 8px">点击上传视频</div>
+          </div>
+        </Upload>
+
+        <div v-if="uploading" class="upload-progress">
+          <div class="progress-text">上传中... {{ uploadProgress }}%</div>
+          <div class="progress-bar">
+            <div
+              class="progress-bar-inner"
+              :style="{ width: uploadProgress + '%' }"
+            ></div>
+          </div>
+        </div>
+
+        <div class="upload-tips">
+          <p>支持的视频格式：MP4、AVI、MOV、FLV 等</p>
+          <p>视频大小不超过 500MB</p>
+          <p>可以多次上传视频，上传完成后点击"确认"按钮</p>
+        </div>
+      </div>
+
+      <template #footer>
+        <Space>
+          <Button @click="handleCloseUpload" :disabled="uploading">
+            取消
+          </Button>
+          <Button type="primary" @click="handleConfirmUpload" :disabled="uploading">
+            确认
+          </Button>
+        </Space>
+      </template>
+    </Modal>
+
+    <!-- 设置视频可查看时间弹窗 -->
+    <Modal
+      v-model:open="videoTimeVisible"
+      title="设置视频可查看时间"
+      :width="500"
+      @ok="handleSaveVideoTime"
+    >
+      <div class="py-4">
+        <div class="mb-4">
+          <div class="mb-2 text-gray-600">当前设置的时间:</div>
+          <div v-if="currentVideo?.availableAt" class="text-base mb-4">
+            <Tag color="blue">{{ currentVideo.availableAt }}</Tag>
+          </div>
+          <div v-else class="text-gray-400 mb-4">暂未设置（立即可查看）</div>
+        </div>
+        <div>
+          <div class="mb-2 font-medium">新的可查看时间:</div>
+          <DatePicker
+            v-model:value="videoAvailableTime"
+            show-time
+            format="YYYY-MM-DD HH:mm:ss"
+            placeholder="选择可查看时间"
+            style="width: 100%"
+          />
+          <div class="mt-2 text-sm text-gray-500">
+            <ClockCircleOutlined class="mr-1" />
+            用户只有到达设置的时间后才能查看该视频。留空表示立即可查看。
+          </div>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- 视频播放弹窗 -->
+    <Modal
+      v-model:open="videoPlayerVisible"
+      title="视频播放"
+      :width="900"
+      :footer="null"
+      :centered="true"
+      @cancel="currentVideoUrl = ''"
+    >
+      <div class="video-player-wrapper">
+        <video
+          v-if="currentVideoUrl"
+          :src="currentVideoUrl"
+          controls
+          autoplay
+          class="video-player"
+        >
+          您的浏览器不支持视频播放
+        </video>
+      </div>
+    </Modal>
+  </Page>
+</template>
+
+<script lang="ts">
+import { h } from 'vue';
+export default { name: 'AncestorRitualOrders' };
+</script>
+
+<style scoped>
+.search-form {
+  margin-bottom: 16px;
+}
+
+.search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-item label {
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.mt-4 {
+  margin-top: 16px;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+.price {
+  color: #d97706;
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.detail-container {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.video-item {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.empty-video,
+.empty-log {
+  text-align: center;
+  padding: 40px 0;
+  color: #999;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-gray {
+  color: #6b7280;
+  margin: 4px 0;
+}
+
+.text-sm {
+  font-size: 12px;
+}
+
+.upload-container {
+  padding: 20px 0;
+}
+
+.upload-progress {
+  margin-top: 20px;
+}
+
+.progress-text {
+  text-align: center;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #1890ff;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  background-color: #f0f0f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-bar-inner {
+  height: 100%;
+  background-color: #1890ff;
+  transition: width 0.3s ease;
+}
+
+.upload-tips {
+  margin-top: 20px;
+  padding: 12px;
+  background-color: #f6f8fa;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.upload-tips p {
+  margin: 4px 0;
+}
+
+/* 视频卡片样式 */
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.video-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  background: #fff;
+}
+
+.video-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.video-thumbnail {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 aspect ratio */
+  background: #000;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.thumbnail-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.play-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+.video-thumbnail:hover .play-overlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.play-icon {
+  font-size: 48px;
+  color: rgba(255, 255, 255, 0.9);
+  transition: all 0.3s ease;
+}
+
+.video-thumbnail:hover .play-icon {
+  font-size: 56px;
+  color: #fff;
+}
+
+.thumbnail-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.video-locked {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 12px;
+  gap: 8px;
+  z-index: 2;
+}
+
+.video-locked .anticon {
+  font-size: 24px;
+}
+
+.video-info {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.video-time {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #6b7280;
+  min-height: 20px;
+}
+
+.video-button-row {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.video-button-row .ant-btn {
+  flex: 1;
+  height: 32px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.video-button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.video-button-group .ant-btn {
+  height: 28px;
+  font-size: 12px;
+}
+
+.video-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 8px;
+  margin-top: 4px;
+}
+
+.video-actions .ant-btn-link {
+  padding: 4px 8px;
+  height: auto;
+}
+
+.empty-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.video-section {
+  padding: 16px 0;
+}
+
+.video-section:not(:last-child) {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.video-player-wrapper {
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+  height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+</style>
