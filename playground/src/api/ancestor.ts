@@ -181,6 +181,8 @@ export const ancestorApi = {
     requestClient.get<ProductOrder>(`/ancestor/product-orders/${id}`),
   updateProductOrder: (id: string, data: Partial<ProductOrder>) =>
     requestClient.put<ProductOrder>(`/ancestor/product-orders/${id}`, data),
+  confirmProductOrderPayment: (id: string) =>
+    requestClient.post(`/ancestor/product-orders/${id}/confirm-payment`),
 
   // 代祭祀订单
   ritualOrders: (params?: Record<string, unknown>) =>
@@ -193,6 +195,8 @@ export const ancestorApi = {
     requestClient.put<RitualOrder>(`/ancestor/ritual-orders/${id}`, data),
   addRitualOrderVideo: (orderId: string, data: { videoUrl: string; stage: string; availableAt?: string }) =>
     requestClient.post(`/ancestor/ritual-orders/${orderId}/videos`, data),
+  confirmRitualOrderPayment: (id: string) =>
+    requestClient.post(`/ancestor/ritual-orders/${id}/confirm-payment`),
 
   // 祭祀套餐
   ritualPackages: () =>
