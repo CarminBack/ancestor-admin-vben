@@ -161,10 +161,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, h } from 'vue';
 import { Card, Tabs, TabPane, Table, Button, Input, Space, Tag, Modal, message } from 'ant-design-vue';
-import { SearchOutlined } from '@ant-design/icons-vue';
 import { ancestorApi, type ProductOrder, type RitualOrder } from '#/api/ancestor';
+
+const SearchOutlined = () => h('span', { class: 'i-ant-design:search-outlined' });
 
 const activeTab = ref('product');
 
