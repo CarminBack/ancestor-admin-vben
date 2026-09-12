@@ -162,7 +162,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, h } from 'vue';
-import { Card, Tabs, TabPane, Table, Button, Input, Space, Tag, Modal, message } from 'ant-design-vue';
+import { Card, Tabs, TabPane, Table, Button, Input, Space, Tag, Modal, message } from 'antdv-next';
 import { ancestorApi, type ProductOrder, type RitualOrder } from '#/api/ancestor';
 
 const SearchOutlined = () => h('span', { class: 'i-ant-design:search-outlined' });
