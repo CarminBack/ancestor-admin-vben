@@ -1,0 +1,157 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ProductCategory {
+  id        String    @id @default(uuid())
+  name      String    @db.VarChar(100)
+  image     String?   @db.VarChar(500)
+  sort      Int       @default(0)
+  status    Int       @default(1) @db.TinyInt
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  products  Product[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id            String          @id @default(uuid())
+  name          String          @db.VarChar(200)
+  categoryId    String          @map("category_id") @db.VarChar(36)
+  cover         String?         @db.VarChar(500)
+  images        String?         @db.Text
+  description   String?         @db.Text
+  price         Decimal         @db.Decimal(10, 2)
+  originalPrice Decimal?        @map("original_price") @db.Decimal(10, 2)
+  stock         Int             @default(0)
+  sales         Int             @default(0)
+  status        Int             @default(1) @db.TinyInt
+  sort          Int             @default(0)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  category      ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orders        ProductOrder[]
+
+  @@map("products")
+}
+
+model ProductOrder {
+  id              String    @id @default(uuid())
+  orderNo         String    @unique @map("order_no") @db.VarChar(50)
+  productId       String    @map("product_id") @db.VarChar(36)
+  quantity        Int
+  price           Decimal   @db.Decimal(10, 2)
+  amount          Decimal   @db.Decimal(10, 2)
+  receiverName    String    @map("receiver_name") @db.VarChar(100)
+  receiverPhone   String    @map("receiver_phone") @db.VarChar(20)
+  receiverAddress String    @map("receiver_address") @db.VarChar(500)
+  status          String    @default("PENDING_PAYMENT") @db.VarChar(50)
+  paidAt          DateTime? @map("paid_at")
+  shippedAt       DateTime? @map("shipped_at")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  product         Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([orderNo], map: "idx_order_no")
+  @@index([status], map: "idx_status")
+  @@index([createdAt], map: "idx_created_at")
+  @@map("product_orders")
+}
+
+model RitualPackage {
+  id          String        @id @default(uuid())
+  name        String        @db.VarChar(200)
+  description String?       @db.Text
+  cover       String?       @db.VarChar(500)
+  price       Decimal       @db.Decimal(10, 2)
+  sort        Int           @default(0)
+  status      Int           @default(1) @db.TinyInt
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  orders      RitualOrder[]
+
+  @@map("ritual_packages")
+}
+
+model RitualOrder {
+  id           String        @id @default(uuid())
+  orderNo      String        @unique @map("order_no") @db.VarChar(50)
+  orderName    String        @map("order_name") @db.VarChar(100)
+  deceasedName String        @map("deceased_name") @db.VarChar(100)
+  packageId    String        @map("package_id") @db.VarChar(36)
+  ritualDate   String        @map("ritual_date") @db.VarChar(20)
+  amount       Decimal       @db.Decimal(10, 2)
+  status       String        @default("PENDING_PAYMENT") @db.VarChar(50)
+  remark       String?       @db.Text
+  paidAt       DateTime?     @map("paid_at")
+  completedAt  DateTime?     @map("completed_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  package      RitualPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  videos       RitualVideo[]
+  logs         RitualLog[]
+
+  @@index([orderNo], map: "idx_order_no")
+  @@index([status], map: "idx_status")
+  @@index([createdAt], map: "idx_created_at")
+  @@map("ritual_orders")
+}
+
+model RitualVideo {
+  id             String      @id @default(uuid())
+  ritualOrderId  String      @map("ritual_order_id") @db.VarChar(36)
+  stage          String      @db.VarChar(50)
+  title          String      @db.VarChar(200)
+  videoUrl       String      @map("video_url") @db.VarChar(500)
+  thumbnailUrl   String?     @map("thumbnail_url") @db.VarChar(500)
+  duration       Int?
+  fileSize       BigInt?     @map("file_size")
+  status         Int         @default(1) @db.TinyInt
+  availableAt    DateTime?   @map("available_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  ritualOrder    RitualOrder @relation(fields: [ritualOrderId], references: [id], onDelete: Cascade)
+
+  @@index([ritualOrderId], map: "idx_ritual_order")
+  @@index([stage], map: "idx_stage")
+  @@map("ritual_videos")
+}
+
+model RitualLog {
+  id             String      @id @default(uuid())
+  ritualOrderId  String      @map("ritual_order_id") @db.VarChar(36)
+  fromStatus     String      @map("from_status") @db.VarChar(50)
+  toStatus       String      @map("to_status") @db.VarChar(50)
+  operatorId     String?     @map("operator_id") @db.VarChar(36)
+  operatorName   String      @map("operator_name") @db.VarChar(100)
+  remark         String?     @db.Text
+  createdAt      DateTime    @default(now()) @map("created_at")
+  ritualOrder    RitualOrder @relation(fields: [ritualOrderId], references: [id], onDelete: Cascade)
+
+  @@index([ritualOrderId], map: "idx_ritual_order")
+  @@map("ritual_logs")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  username  String   @unique @db.VarChar(50)
+  password  String   @db.VarChar(255)
+  realname  String?  @db.VarChar(100)
+  phone     String?  @db.VarChar(20)
+  email     String?  @db.VarChar(100)
+  avatar    String?  @db.VarChar(500)
+  status    Int      @default(1) @db.TinyInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("admins")
+}

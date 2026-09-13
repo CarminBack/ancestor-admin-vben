@@ -214,7 +214,12 @@ catalog:
 
 allowBuilds:
   '@parcel/watcher': true
+  '@prisma/client': true
+  '@prisma/engines': true
   core-js: true
   esbuild: true
   lefthook: true
+  msgpackr-extract: set this to true or false
+  prisma: true
   vue-demi: true
+  workerd: set this to true or false

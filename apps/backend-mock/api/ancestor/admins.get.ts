@@ -1,13 +1,14 @@
 /**
- * 祭祀套餐列表
- * GET /api/ancestor/ritual-packages
+ * 管理员列表
+ * GET /api/ancestor/admins
  */
 export default eventHandler(async (event) => {
   try {
     const query = getQuery(event);
     const page = Number(query.page) || 1;
     const pageSize = Number(query.pageSize) || 10;
-    const name = query.name as string;
+    const username = query.username as string;
+    const phone = query.phone as string;
     const status = query.status as string;
 
     const db = event.context.db;
@@ -15,9 +16,14 @@ export default eventHandler(async (event) => {
     let whereClause = '1=1';
     const params: any[] = [];
 
-    if (name) {
-      whereClause += ' AND name LIKE ?';
-      params.push(`%${name}%`);
+    if (username) {
+      whereClause += ' AND username LIKE ?';
+      params.push(`%${username}%`);
+    }
+
+    if (phone) {
+      whereClause += ' AND phone LIKE ?';
+      params.push(`%${phone}%`);
     }
 
     if (status) {
@@ -27,9 +33,7 @@ export default eventHandler(async (event) => {
 
     // 查询总数
     const countResult = await db
-      .prepare(
-        `SELECT COUNT(*) as total FROM ritual_packages WHERE ${whereClause}`,
-      )
+      .prepare(`SELECT COUNT(*) as total FROM admins WHERE ${whereClause}`)
       .bind(...params)
       .first();
 
@@ -40,17 +44,16 @@ export default eventHandler(async (event) => {
     const listQuery = `
       SELECT 
         id,
-        name,
-        description,
-        cover,
-        price,
-        sort,
+        username,
+        nickname,
+        phone,
+        role,
         status,
-        created_at as createdAt,
-        updated_at as updatedAt
-      FROM ritual_packages
+        last_login_at as lastLoginAt,
+        created_at as createdAt
+      FROM admins
       WHERE ${whereClause}
-      ORDER BY sort DESC, created_at DESC
+      ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `;
 
@@ -64,7 +67,7 @@ export default eventHandler(async (event) => {
       total,
     });
   } catch (error: any) {
-    console.error('获取祭祀套餐列表失败:', error);
-    return serverErrorResponse(event, error.message || '获取祭祀套餐列表失败');
+    console.error('获取管理员列表失败:', error);
+    return serverErrorResponse(event, error.message || '获取管理员列表失败');
   }
 });

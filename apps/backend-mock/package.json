@@ -7,15 +7,23 @@
   "author": "",
   "scripts": {
     "build": "nitro build",
-    "start": "nitro dev"
+    "start": "nitro dev",
+    "postinstall": "prisma generate || exit 0",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:push": "prisma db push",
+    "prisma:studio": "prisma studio",
+    "db:init": "mysql -h 127.0.0.1 -P 3307 -u root -prootpassword < db/init.sql"
   },
   "dependencies": {
     "@faker-js/faker": "catalog:",
+    "@prisma/client": "5.22.0",
     "jsonwebtoken": "catalog:",
     "nitropack": "catalog:"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "catalog:",
-    "h3": "catalog:"
+    "h3": "catalog:",
+    "prisma": "5.22.0"
   }
 }

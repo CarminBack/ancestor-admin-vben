@@ -1,9 +1,6 @@
+import prisma from '~/utils/db';
 import { verifyAccessToken } from '~/utils/jwt-utils';
 import { unAuthorizedResponse } from '~/utils/response';
-
-// 临时存储
-const videoStore: Record<string, any[]> = {};
-const orderStore: Record<string, any> = {};
 
 export default eventHandler(async (event) => {
   const userinfo = verifyAccessToken(event);
@@ -11,41 +8,74 @@ export default eventHandler(async (event) => {
     return unAuthorizedResponse(event);
   }
 
-  const id = getRouterParam(event, 'id');
+  const id = event.context.params?.id;
+  if (!id) {
+    return useResponseError('订单ID不能为空');
+  }
 
-  // 获取订单状态（如果之前更新过）
-  const savedOrder = orderStore[id!] || {};
-  const videos = videoStore[id!] || [];
-
-  return useResponseSuccess({
-    id,
-    orderNo: 'JZ202609100001',
-    orderName: '张三',
-    deceasedName: '张XX',
-    packageId: '1',
-    packageName: '诚心祭祀',
-    amount: 268,
-    ritualDate: '2026-09-10',
-    status: savedOrder.status || 'PREPARING',
-    remark: '',
-    paidAt: '2026-09-09 20:35:00',
-    completedAt: savedOrder.status === 'COMPLETED' ? new Date().toISOString().replace('T', ' ').substring(0, 19) : null,
-    createdAt: '2026-09-09 20:30:00',
-    updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
-    videos: videos,
-    videoCount: videos.length,
-    logs: [
-      {
-        id: '1',
-        fromStatus: 'PAID',
-        toStatus: 'PREPARING',
-        operatorName: '王管理员',
-        remark: '开始准备祭祀用品',
-        createdAt: '2026-09-10 09:00:00',
+  // 查询订单详情
+  const order = await prisma.ritualOrder.findUnique({
+    where: { id },
+    include: {
+      package: {
+        select: {
+          name: true,
+        },
       },
-    ],
+      videos: {
+        orderBy: { createdAt: 'desc' },
+      },
+      logs: {
+        orderBy: { createdAt: 'desc' },
+      },
+    },
   });
-});
 
-// 导出存储供其他接口使用
-export { videoStore, orderStore };
+  if (!order) {
+    return useResponseError('订单不存在');
+  }
+
+  // 格式化返回数据
+  const formattedOrder = {
+    id: order.id,
+    orderNo: order.orderNo,
+    orderName: order.orderName,
+    deceasedName: order.deceasedName,
+    packageId: order.packageId,
+    packageName: order.package.name,
+    ritualDate: order.ritualDate,
+    amount: Number(order.amount),
+    status: order.status,
+    videoCount: order.videos.length,
+    remark: order.remark || '',
+    paidAt: order.paidAt?.toISOString() || null,
+    completedAt: order.completedAt?.toISOString() || null,
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+    videos: order.videos.map((video) => ({
+      id: video.id,
+      ritualOrderId: video.ritualOrderId,
+      stage: video.stage,
+      title: video.title,
+      videoUrl: video.videoUrl,
+      thumbnailUrl: video.thumbnailUrl || '',
+      duration: video.duration || 0,
+      fileSize: video.fileSize || 0,
+      status: video.status,
+      availableAt: video.availableAt?.toISOString() || null,
+      createdAt: video.createdAt.toISOString(),
+    })),
+    logs: order.logs.map((log) => ({
+      id: log.id,
+      ritualOrderId: log.ritualOrderId,
+      fromStatus: log.fromStatus,
+      toStatus: log.toStatus,
+      operatorId: log.operatorId || '',
+      operatorName: log.operatorName,
+      remark: log.remark || '',
+      createdAt: log.createdAt.toISOString(),
+    })),
+  };
+
+  return useResponseSuccess(formattedOrder);
+});
