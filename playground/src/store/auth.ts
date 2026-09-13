@@ -110,7 +110,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchUserInfo() {
-    const userInfo = await getUserInfoApi();
+    const userInfo = { ...await getUserInfoApi(), homePath: '/dashboard' };
     userStore.setUserInfo(userInfo);
     return userInfo;
   }

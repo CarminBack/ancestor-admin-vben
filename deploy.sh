@@ -22,6 +22,7 @@ services:
       - NODE_ENV=production
     volumes:
       - ./data:/app/data
+      - ./data:/app/backend/data
     networks:
       - ancestor-network
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, onActivated } from 'vue';
 import { Page } from '@vben/common-ui';
 import {
   Card,
@@ -12,14 +12,14 @@ import {
   Modal,
   DatePicker,
 } from 'antdv-next';
-import { ancestorApi, type RitualOrder } from '#/api/ancestor';
+import { ancestorApi, type RitualOrder, type RitualOrderDetail } from '#/api/ancestor';
 import OrderDetailModal from './components/OrderDetailModal.vue';
 
 const loading = ref(false);
 const records = ref<RitualOrder[]>([]);
 const total = ref(0);
 const videoModalVisible = ref(false);
-const currentRecord = ref<RitualOrder>();
+const currentRecord = ref<RitualOrderDetail>();
 
 // 视频时间设置相关
 const videoTimeVisible = ref(false);
@@ -62,6 +62,8 @@ const statusTextMap: Record<string, string> = {
   COMPLETED: '已完成',
   PENDING_VIDEO: '待上传视频',
 };
+
+onActivated(() => { if (!loading.value) fetchRecords(); });
 
 const fetchRecords = async () => {
   loading.value = true;
@@ -145,7 +147,7 @@ const handleSaveVideoTime = async () => {
       formattedTime = videoAvailableTime.value.format('YYYY-MM-DD HH:mm:ss');
     }
 
-    // 临时更新本地数据
+    await ancestorApi.updateVideoAvailableTime(currentVideo.value.id, formattedTime);
     if (currentRecord.value?.videos) {
       const video = currentRecord.value.videos.find(v => v.id === currentVideo.value.id);
       if (video) {
@@ -173,7 +175,7 @@ const handleDeleteVideo = (video: any) => {
     cancelText: '取消',
     onOk: async () => {
       try {
-        // 临时更新本地数据
+        await ancestorApi.deleteVideo(video.id);
         if (currentRecord.value?.videos) {
           const index = currentRecord.value.videos.findIndex(v => v.id === video.id);
           if (index > -1) {

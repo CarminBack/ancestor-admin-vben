@@ -103,6 +103,7 @@ export interface RitualVideo {
   id: string;
   ritualOrderId: string;
   type: RitualVideoType;
+  stage?: string;
   title: string;
   videoUrl: string;
   thumbnailUrl?: string;
@@ -201,6 +202,13 @@ export const ancestorApi = {
   // 祭祀套餐
   ritualPackages: () =>
     requestClient.get<{ items: RitualPackage[]; total: number }>('/ancestor/ritual-packages'),
+
+  updateVideoAvailableTime: (id: string, availableAt: string) => requestClient.put(`/ancestor/ritual-videos/${id}`, { availableAt }),
+  deleteVideo: (id: string) => requestClient.delete(`/ancestor/ritual-videos/${id}`),
+  confirmRitualVideo: (id: string, stage: string) => requestClient.post(`/ancestor/ritual-orders/${id}/confirm-video`, { stage }),
+  advanceRitualOrder: (id: string) => requestClient.post(`/ancestor/ritual-orders/${id}/advance`),
+  getSettings: () => requestClient.get<Record<string, string>>('/ancestor/settings'),
+  saveSettings: (data: Record<string, string>) => requestClient.put('/ancestor/settings', data),
 
   // 七牛云私有空间下载链接
   getQiniuDownloadUrl: (url: string, expires?: number) =>

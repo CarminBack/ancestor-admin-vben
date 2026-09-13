@@ -9,7 +9,7 @@ import {
   Timeline,
   Space,
 } from 'antdv-next';
-import type { RitualOrder } from '#/api/ancestor';
+import type { RitualOrder, RitualOrderDetail } from '#/api/ancestor';
 
 const DescriptionsItem = Descriptions.Item;
 const TimelineItem = Timeline.Item;
@@ -22,7 +22,7 @@ const VideoCameraOutlined = () => h('span', { class: 'i-ant-design:video-camera-
 
 interface Props {
   visible: boolean;
-  order: RitualOrder | null;
+  order?: RitualOrderDetail | null;
   showOperations?: boolean; // 是否显示订单操作板块（取消祭祀等按钮）
   showUploadButtons?: boolean; // 是否显示上传视频按钮
 }
@@ -52,6 +52,8 @@ const statusColorMap: Record<string, string> = {
 };
 
 const statusTextMap: Record<string, string> = {
+  PENDING_PAYMENT: '待支付',
+  PENDING_RITUAL: '待祭祀',
   PAID: '已支付',
   PREPARING: '准备中',
   PACKAGING: '封包中',
@@ -306,7 +308,7 @@ const handleClose = () => {
       <Card v-if="showOperations" title="订单操作" :bordered="false" class="mb-4">
         <Space>
           <Button
-            v-if="order.status !== 'CANCELLED' && order.status !== 'COMPLETED'"
+            v-if="['PENDING_PAYMENT', 'PAID'].includes(order.status)"
             danger
             @click="emit('cancel-ritual', order)"
           >

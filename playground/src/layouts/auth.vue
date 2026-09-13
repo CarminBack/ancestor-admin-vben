@@ -14,8 +14,8 @@ const clickLogo = () => {};
   <AuthPageLayout
     :app-name="appName"
     :logo="logo"
-    :page-description="'合擎AI'"
-    :page-title="'合擎AI'"
+    :page-description="'祭祀服务与订单管理'"
+    :page-title="'祭祖管理后台'"
     :click-logo="clickLogo"
   >
     <!-- 自定义工具栏 -->

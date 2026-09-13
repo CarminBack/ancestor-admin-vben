@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, h } from 'vue';
+import { ref, reactive, onMounted, onActivated, h } from 'vue';
 import { Page } from '@vben/common-ui';
 import {
   Card,
@@ -20,7 +20,7 @@ import {
   DatePicker,
 } from 'antdv-next';
 import { ancestorApi, type RitualOrder, type RitualOrderDetail, RitualStatus } from '#/api/ancestor';
-import { getQiniuToken, uploadToQiniu } from '#/utils/qiniu';
+import { uploadRitualVideo } from '#/utils/ritual-video-upload';
 import OrderDetailModal from './components/OrderDetailModal.vue';
 
 // 图标组件
@@ -41,7 +41,7 @@ const uploading = ref(false);
 const fileList = ref<any[]>([]);
 const videoTimeVisible = ref(false);
 const currentVideo = ref<any>(null);
-const videoAvailableTime = ref<string>('');
+const videoAvailableTime = ref<any>('');
 const videoPlayerVisible = ref(false);
 const currentVideoUrl = ref<string>('');
 
@@ -119,11 +119,14 @@ const getCurrentStep = (status: string) => {
   return index >= 0 ? index : 0;
 };
 
+onActivated(() => { if (!loading.value) fetchOrders(); });
+
 const fetchOrders = async () => {
   loading.value = true;
   try {
     const res = await ancestorApi.ritualOrders({
       ...searchForm,
+      excludeCompleted: true,
       page: pagination.current,
       pageSize: pagination.pageSize,
     });
@@ -194,9 +197,11 @@ const handleUpdateStatus = (orderId: string, newStatus: string) => {
 const getNextStatus = (currentStatus: string): string | null => {
   const statusFlow: Record<string, string> = {
     PAID: 'PREPARING',
+    PENDING_RITUAL: 'PREPARING',
     PREPARING: 'PACKAGING',
     PACKAGING: 'BURNING',
-    BURNING: 'COMPLETED',
+    BURNING: 'PENDING_VIDEO',
+    PENDING_VIDEO: 'COMPLETED',
   };
   return statusFlow[currentStatus] || null;
 };
@@ -213,7 +218,7 @@ const getUploadButtonText = (status: string): string => {
 
 // 判断是否显示上传视频按钮
 const shouldShowUploadButton = (status: string): boolean => {
-  return ['PAID', 'PREPARING', 'PACKAGING', 'BURNING'].includes(status);
+  return ['PAID', 'PENDING_RITUAL', 'PREPARING', 'PACKAGING', 'BURNING', 'PENDING_VIDEO'].includes(status);
 };
 
 // 上传视频
@@ -246,23 +251,16 @@ const customRequest = async (options: any) => {
     uploading.value = true;
     console.log('开始上传视频:', file.name, file.size);
 
-    // 获取上传凭证和配置
-    console.log('正在获取七牛云上传凭证...');
-    const config = await getQiniuToken();
-    console.log('获取到七牛云配置:', config);
-
-    // 上传到七牛云
-    console.log('开始上传到七牛云...');
-    const videoUrl = await uploadToQiniu(file, config, (progress) => {
-      uploadProgress.value = progress.percent;
-      onProgress({ percent: progress.percent });
+    // 使用当前可用的视频接口，保留原上传弹窗及进度条。
+    const videoUrl = await uploadRitualVideo(file, (percent) => {
+      uploadProgress.value = percent;
+      onProgress({ percent });
     });
-    console.log('上传成功，视频URL:', videoUrl);
 
     // 调用后端 API 保存视频记录，标记视频所属阶段
     const videoData = {
       videoUrl: videoUrl,
-      stage: uploadStage.value || uploadingOrder.value!.status, // 优先使用指定阶段，否则使用订单状态
+      stage: ['PAID', 'PENDING_RITUAL'].includes(uploadStage.value || uploadingOrder.value!.status) ? 'PREPARING' : (uploadStage.value || uploadingOrder.value!.status),
     };
 
     await ancestorApi.addRitualOrderVideo(uploadingOrder.value!.id, videoData);
@@ -275,6 +273,8 @@ const customRequest = async (options: any) => {
     // 重置上传列表，允许继续上传
     fileList.value = [];
     uploadProgress.value = 0;
+    await fetchOrders();
+    if (currentOrder.value?.id === uploadingOrder.value?.id) currentOrder.value = await ancestorApi.getRitualOrder(uploadingOrder.value!.id);
 
   } catch (error: any) {
     console.error('视频上传失败:', error);
@@ -293,15 +293,15 @@ const customRequest = async (options: any) => {
 
 // 文件选择前的验证
 const beforeUpload = (file: File) => {
-  const isVideo = file.type.startsWith('video/');
+  const isVideo = file.name.toLowerCase().endsWith('.mp4');
   if (!isVideo) {
     message.error('只能上传视频文件！');
     return false;
   }
 
-  const isLt500M = file.size / 1024 / 1024 < 500;
+  const isLt500M = file.size / 1024 / 1024 <= 100;
   if (!isLt500M) {
-    message.error('视频大小不能超过 500MB！');
+    message.error('视频大小不能超过 100MB！');
     return false;
   }
 
@@ -328,127 +328,36 @@ const getVideosByType = (type: string) => {
 
 // 自动更新订单状态
 const autoUpdateOrderStatus = async () => {
-  if (!uploadingOrder.value) return;
-
+  if (!uploadingOrder.value || uploading.value) return;
+  const id = uploadingOrder.value.id;
   try {
-    console.log('=== 自动更新订单状态 ===');
-
-    // 重新加载订单详情，获取最新的视频数量
-    const orderDetail = await ancestorApi.getRitualOrder(uploadingOrder.value.id);
-    console.log('获取到的订单详情:', orderDetail);
-
-    // 判断应该处于哪个状态
-    const hasPreparingVideo = orderDetail.videos?.some(v => v.stage === 'PREPARING');
-    const hasPackagingVideo = orderDetail.videos?.some(v => v.stage === 'PACKAGING');
-    const hasBurningVideo = orderDetail.videos?.some(v => v.stage === 'BURNING');
-
-    console.log('准备视频:', hasPreparingVideo);
-    console.log('封包视频:', hasPackagingVideo);
-    console.log('祭祀视频:', hasBurningVideo);
-    console.log('当前 uploadStage.value:', uploadStage.value);
-
-    let targetStatus = 'PREPARING'; // 默认状态
-    let statusMessage = '';
-
-    // 根据刚上传的视频阶段判断应该进入的下一个状态
-    if (uploadStage.value === 'BURNING' || hasBurningVideo) {
-      // 如果三个阶段都有视频，完成订单
-      if (hasBurningVideo && hasPackagingVideo && hasPreparingVideo) {
-        console.log('三个阶段都有视频，询问是否完成订单');
-
-        Modal.confirm({
-          title: '确认完成祭祀',
-          content: '已上传所有阶段的视频，确认后订单将标记为已完成并移入祭祀记录。是否确认？',
-          okText: '确认完成',
-          cancelText: '暂不完成',
-          onOk: async () => {
-            await ancestorApi.updateRitualOrder(uploadingOrder.value!.id, {
-              status: 'COMPLETED' as RitualStatus,
-            });
-            message.success('祭祀已完成，订单已移入祭祀记录');
-            uploadVisible.value = false;
-            uploadStage.value = '';
-            await fetchOrders();
-            detailVisible.value = false;
-          },
-          onCancel: async () => {
-            // 更新状态到 BURNING
-            await ancestorApi.updateRitualOrder(uploadingOrder.value!.id, {
-              status: 'BURNING' as RitualStatus,
-            });
-            message.success('状态已更新为：焚烧中');
-            uploadVisible.value = false;
-            uploadStage.value = '';
-            await fetchOrders();
-            if (currentOrder.value) {
-              const res = await ancestorApi.getRitualOrder(uploadingOrder.value!.id);
-              currentOrder.value = res;
-            }
-          },
-        });
-        return;
-      }
-
-      targetStatus = 'BURNING';
-      statusMessage = '焚烧中';
-    } else if (uploadStage.value === 'PACKAGING') {
-      // 上传了封包视频，进入焚烧阶段
-      targetStatus = 'BURNING';
-      statusMessage = '焚烧中';
-    } else if (uploadStage.value === 'PREPARING') {
-      // 上传了准备视频，进入封包阶段
-      targetStatus = 'PACKAGING';
-      statusMessage = '封包中';
+    const detail = await ancestorApi.getRitualOrder(id);
+    const stage = ['PAID', 'PENDING_RITUAL'].includes(uploadStage.value) ? 'PREPARING' : uploadStage.value;
+    const next = ({ PREPARING: 'PACKAGING', PACKAGING: 'BURNING', BURNING: 'COMPLETED' } as Record<string, string>)[stage];
+    if (!detail.videos.some(v => v.stage === stage) && detail.status !== 'PENDING_VIDEO') {
+      message.warning('请先上传当前阶段的视频');
+      return;
     }
-
-    console.log('目标状态:', targetStatus);
-
-    // 弹窗确认进入下一步
+    const refresh = async () => {
+      handleCloseUpload();
+      await fetchOrders();
+      if (currentOrder.value?.id === id) currentOrder.value = await ancestorApi.getRitualOrder(id);
+    };
+    if (!next) { await refresh(); return; }
     Modal.confirm({
-      title: '确认进入下一步',
-      content: `视频上传完成，是否进入下一步：${statusMessage}？`,
-      okText: '确认',
-      cancelText: '稍后',
+      title: next === 'COMPLETED' ? '确认完成祭祀' : '确认进入下一步',
+      content: `视频已保存，是否进入下一步：${statusTextMap[next]}？`,
+      okText: '确认', cancelText: '稍后',
       onOk: async () => {
-        // 更新订单状态到目标状态
-        console.log('更新订单状态到:', targetStatus);
-        await ancestorApi.updateRitualOrder(uploadingOrder.value!.id, {
-          status: targetStatus as RitualStatus,
-        });
-        console.log('状态更新成功');
-
-        message.success(`状态已更新为：${statusMessage}`);
-
-        uploadVisible.value = false;
-        uploadStage.value = '';
-
-        // 刷新订单列表
-        await fetchOrders();
-        console.log('订单列表已刷新');
-        console.log('第一个订单的新状态:', orders.value[0]?.status);
-
-        // 如果是在详情页，刷新详情
-        if (currentOrder.value) {
-          const res = await ancestorApi.getRitualOrder(uploadingOrder.value!.id);
-          currentOrder.value = res;
-          console.log('详情已刷新:', res);
-        }
+        try {
+          await ancestorApi.confirmRitualVideo(id, stage);
+          await refresh();
+          message.success('状态更新成功');
+        } catch { message.error('状态更新失败，请刷新后重试'); }
       },
-      onCancel: () => {
-        uploadVisible.value = false;
-        uploadStage.value = '';
-        fetchOrders();
-        if (currentOrder.value) {
-          ancestorApi.getRitualOrder(uploadingOrder.value!.id).then(res => {
-            currentOrder.value = res;
-          });
-        }
-      },
+      onCancel: refresh,
     });
-  } catch (error) {
-    console.error('自动更新状态失败:', error);
-    message.error('更新状态失败');
-  }
+  } catch { message.error('获取订单状态失败'); }
 };
 
 // 确认上传完成
@@ -496,25 +405,21 @@ const handleSetVideoTime = (video: any) => {
 // 保存视频可查看时间
 const handleSaveVideoTime = async () => {
   try {
-    if (!videoAvailableTime.value) {
-      message.error('请选择可查看时间');
-      return;
-    }
+    const selectedTime = videoAvailableTime.value;
 
-    // 格式化时间为 YYYY-MM-DD HH:mm:ss
+    // 留空表示立即开放。
     let formattedTime = '';
-    if (videoAvailableTime.value instanceof Date) {
+    if (selectedTime instanceof Date) {
       const date = videoAvailableTime.value;
       formattedTime = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
     } else if (typeof videoAvailableTime.value === 'string') {
       formattedTime = videoAvailableTime.value;
-    } else {
+    } else if (videoAvailableTime.value) {
       // dayjs 对象
       formattedTime = videoAvailableTime.value.format('YYYY-MM-DD HH:mm:ss');
     }
 
-    // TODO: 调用后端 API 更新视频可查看时间
-    // await ancestorApi.updateVideoAvailableTime(currentVideo.value.id, formattedTime);
+    await ancestorApi.updateVideoAvailableTime(currentVideo.value.id, formattedTime);
 
     // 临时更新本地数据
     if (currentOrder.value?.videos) {
@@ -544,8 +449,7 @@ const handleDeleteVideo = (video: any) => {
     cancelText: '取消',
     onOk: async () => {
       try {
-        // TODO: 调用后端 API 删除视频
-        // await ancestorApi.deleteVideo(video.id);
+        await ancestorApi.deleteVideo(video.id);
 
         // 临时更新本地数据
         if (currentOrder.value?.videos) {
@@ -639,7 +543,6 @@ onMounted(() => {
               <Select.Option value="PACKAGING">封包中</Select.Option>
               <Select.Option value="BURNING">焚化中</Select.Option>
               <Select.Option value="PENDING_VIDEO">待上传视频</Select.Option>
-              <Select.Option value="COMPLETED">已完成</Select.Option>
             </Select>
           </div>
           <Button type="primary" @click="handleSearch">搜索</Button>
@@ -704,7 +607,7 @@ onMounted(() => {
       v-model:visible="detailVisible"
       :order="currentOrder"
       :show-operations="true"
-      :show-upload-buttons="true"
+      :show-upload-buttons="!!currentOrder && shouldShowUploadButton(currentOrder.status)"
       @upload-video="handleUploadVideoByStage"
       @view-video="handleViewVideo"
       @set-video-time="handleSetVideoTime"
@@ -746,8 +649,8 @@ onMounted(() => {
         </div>
 
         <div class="upload-tips">
-          <p>支持的视频格式：MP4、AVI、MOV、FLV 等</p>
-          <p>视频大小不超过 500MB</p>
+          <p>支持的视频格式：MP4</p>
+          <p>视频大小不超过 100MB</p>
           <p>可以多次上传视频，上传完成后点击"确认"按钮</p>
         </div>
       </div>
@@ -784,6 +687,7 @@ onMounted(() => {
           <DatePicker
             v-model:value="videoAvailableTime"
             show-time
+            value-format="YYYY-MM-DD HH:mm:ss"
             format="YYYY-MM-DD HH:mm:ss"
             placeholder="选择可查看时间"
             style="width: 100%"
@@ -821,7 +725,6 @@ onMounted(() => {
 </template>
 
 <script lang="ts">
-import { h } from 'vue';
 export default { name: 'AncestorRitualOrders' };
 </script>
 

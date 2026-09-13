@@ -2,7 +2,7 @@ import type { H3Event } from 'h3';
 
 export function miniappSuccess(data: any, message = '操作成功') {
   return {
-    code: 0,
+    code: 200,
     message,
     data,
   };

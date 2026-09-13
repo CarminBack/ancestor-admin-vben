@@ -1,17 +1,3 @@
-import { verifyAccessToken } from '~/utils/jwt-utils';
-import { unAuthorizedResponse } from '~/utils/response';
-
-export default eventHandler(async (event) => {
-  const userinfo = verifyAccessToken(event);
-  if (!userinfo) {
-    return unAuthorizedResponse(event);
-  }
-
-  const body = await readBody(event);
-
-  return useResponseSuccess({
-    id: Date.now().toString(),
-    ...body,
-    createdAt: new Date().toISOString(),
-  });
-});
+import { defineEventHandler } from 'h3';
+import { catalog } from '~/utils/ancestor-catalog';
+export default defineEventHandler(event => catalog(event, 'categories', true, 'create'));

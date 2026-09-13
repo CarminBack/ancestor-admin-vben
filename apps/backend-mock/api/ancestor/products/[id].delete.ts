@@ -1,15 +1,3 @@
-import { verifyAccessToken } from '~/utils/jwt-utils';
-import { unAuthorizedResponse } from '~/utils/response';
-
-export default eventHandler(async (event) => {
-  const userinfo = verifyAccessToken(event);
-  if (!userinfo) {
-    return unAuthorizedResponse(event);
-  }
-
-  const id = getRouterParam(event, 'id');
-
-  return useResponseSuccess({
-    message: `产品 ${id} 已删除`,
-  });
-});
+import { defineEventHandler } from 'h3';
+import { catalog } from '~/utils/ancestor-catalog';
+export default defineEventHandler(event => catalog(event, 'products', true, 'delete'));
