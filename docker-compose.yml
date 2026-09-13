@@ -1,21 +1,19 @@
 version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: ancestor-mysql
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: ancestor123456
-      MYSQL_DATABASE: ancestor_memorial
-      MYSQL_USER: ancestor
-      MYSQL_PASSWORD: ancestor123456
+  ancestor-admin:
+    image: ghcr.io/carminback/ancestor-admin-vben:latest
+    container_name: ancestor-admin
+    restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "8080:80"
+    environment:
+      - NODE_ENV=production
     volumes:
-      - mysql_data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password
+      - ./data:/app/data
+    networks:
+      - ancestor-network
 
-volumes:
-  mysql_data:
-    driver: local
+networks:
+  ancestor-network:
+    driver: bridge
