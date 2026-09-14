@@ -1,20 +1,10 @@
-version: '3.8'
-
 services:
   ancestor-admin:
-    image: ghcr.io/carminback/ancestor-admin-vben:latest
+    image: ${ANCESTOR_IMAGE:?Set immutable image tag}
     container_name: ancestor-admin
     restart: unless-stopped
     ports:
-      - "8080:80"
-    environment:
-      - NODE_ENV=production
+      - '127.0.0.1:8080:80'
+    env_file: /opt/ancestor-admin/runtime.env
     volumes:
-      - ./data:/app/data
-      - ./data:/app/backend/data
-    networks:
-      - ancestor-network
-
-networks:
-  ancestor-network:
-    driver: bridge
+      - /opt/ancestor-admin/data:/app/data

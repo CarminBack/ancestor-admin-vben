@@ -12,32 +12,43 @@ export interface TimezoneOption {
   timezone: string;
 }
 
-export const MOCK_USERS: UserInfo[] = [
-  {
-    id: 0,
-    password: '123456',
-    realName: 'Vben',
-    roles: ['super'],
-    username: 'vben',
-    homePath: '/dashboard/workspace',
-  },
-  {
-    id: 1,
-    password: '123456',
-    realName: 'Admin',
-    roles: ['admin'],
-    username: 'admin',
-    homePath: '/dashboard/workspace',
-  },
-  {
-    id: 2,
-    password: '123456',
-    realName: 'Jack',
-    roles: ['user'],
-    username: 'jack',
-    homePath: '/dashboard/analytics',
-  },
-];
+export const MOCK_USERS: UserInfo[] = process.env.ANCESTOR_ADMIN_HASH
+  ? [
+      {
+        id: 0,
+        username: 'vben',
+        password: '',
+        realName: '祭祀管理员',
+        roles: ['super'],
+        homePath: '/dashboard',
+      },
+    ]
+  : [
+      {
+        id: 0,
+        password: '123456',
+        realName: 'Vben',
+        roles: ['super'],
+        username: 'vben',
+        homePath: '/dashboard/workspace',
+      },
+      {
+        id: 1,
+        password: '123456',
+        realName: 'Admin',
+        roles: ['admin'],
+        username: 'admin',
+        homePath: '/dashboard/workspace',
+      },
+      {
+        id: 2,
+        password: '123456',
+        realName: 'Jack',
+        roles: ['user'],
+        username: 'jack',
+        homePath: '/dashboard/analytics',
+      },
+    ];
 
 export const MOCK_CODES = [
   // super

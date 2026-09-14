@@ -1,3 +1,5 @@
+import { scryptSync, timingSafeEqual } from 'node:crypto';
+
 import { defineEventHandler, readBody, setResponseStatus } from 'h3';
 import {
   clearRefreshTokenCookie,
@@ -21,22 +23,38 @@ export default defineEventHandler(async (event) => {
     );
   }
 
-  const findUser = MOCK_USERS.find(
-    (item) => item.username === username && item.password === password,
-  );
+  const findUser = MOCK_USERS.find((item) => {
+    if (
+      item.username !== username ||
+      typeof password !== 'string' ||
+      password.length > 256
+    )
+      return false;
+    if (!process.env.ANCESTOR_ADMIN_HASH) return item.password === password;
+    const expected = Buffer.from(process.env.ANCESTOR_ADMIN_HASH, 'hex');
+    const actual = scryptSync(
+      password,
+      process.env.ANCESTOR_ADMIN_SALT || '',
+      64,
+    );
+    return (
+      expected.length === actual.length && timingSafeEqual(expected, actual)
+    );
+  });
 
   if (!findUser) {
     clearRefreshTokenCookie(event);
     return forbiddenResponse(event, 'Username or password is incorrect.');
   }
 
-  const accessToken = generateAccessToken(findUser);
-  const refreshToken = generateRefreshToken(findUser);
+  const { password: _password, ...safeUser } = findUser;
+  const accessToken = generateAccessToken(safeUser as typeof findUser);
+  const refreshToken = generateRefreshToken(safeUser as typeof findUser);
 
   setRefreshTokenCookie(event, refreshToken);
 
   return useResponseSuccess({
-    ...findUser,
+    ...safeUser,
     accessToken,
   });
 });

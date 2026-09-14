@@ -1,86 +1,34 @@
-#!/bin/bash
-set -e
-
-echo "=== 祭祖后台部署脚本 ==="
-
-# 1. 创建部署目录
-mkdir -p /opt/ancestor-admin
-cd /opt/ancestor-admin
-
-# 2. 创建 docker-compose.yml
-cat > docker-compose.yml << 'COMPOSE_EOF'
-version: '3.8'
-
-services:
-  ancestor-admin:
-    image: ghcr.io/carminback/ancestor-admin-vben:latest
-    container_name: ancestor-admin
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    environment:
-      - NODE_ENV=production
-    volumes:
-      - ./data:/app/data
-      - ./data:/app/backend/data
-    networks:
-      - ancestor-network
-
-networks:
-  ancestor-network:
-    driver: bridge
-COMPOSE_EOF
-
-# 3. 登录 GitHub Container Registry (公开镜像无需登录)
-echo "拉取 Docker 镜像..."
-docker compose pull || docker-compose pull
-
-# 4. 启动服务
-echo "启动容器..."
-docker compose up -d || docker-compose up -d
-
-# 5. 等待服务启动
-sleep 10
-
-# 6. 检查服务状态
-echo "检查服务状态..."
-docker ps | grep ancestor-admin
-
-# 7. 配置 Nginx 反向代理（域名访问）
-echo "配置 Nginx..."
-cat > /etc/nginx/conf.d/js.mewinyou.asia.conf << 'NGINX_EOF'
-server {
-    listen 80;
-    server_name js.mewinyou.asia;
-
-    client_max_body_size 100M;
-
-    location / {
-        proxy_pass http://localhost:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-NGINX_EOF
-
-# 8. 测试并重载 Nginx
-nginx -t && systemctl reload nginx
-
-# 9. 安装 SSL 证书
-echo "安装 SSL 证书..."
-if ! command -v certbot &> /dev/null; then
-    echo "安装 certbot..."
-    yum install -y certbot python3-certbot-nginx || apt-get install -y certbot python3-certbot-nginx
+#!/usr/bin/env bash
+set -euo pipefail
+image=${1:?Usage: deploy.sh ghcr.io/carminback/ancestor-admin-vben:COMMIT}
+base=/opt/ancestor-admin
+mkdir -p "$base/backups" "$base/data"
+test -s "$base/runtime.env"
+docker image inspect "$image" >/dev/null
+stamp=$(date +%Y%m%d%H%M%S)
+previous="ancestor-admin-rollback-$stamp"
+had_previous=false
+if docker container inspect ancestor-admin >/dev/null 2>&1; then
+  docker stop ancestor-admin >/dev/null
+  docker rename ancestor-admin "$previous"
+  had_previous=true
 fi
-
-certbot --nginx -d js.mewinyou.asia --non-interactive --agree-tos --email admin@mewinyou.asia || echo "SSL 证书安装失败，请手动执行"
-
-echo ""
-echo "=== 部署完成 ==="
-echo "HTTP 访问: http://39.107.32.221:8080"
-echo "域名访问: https://js.mewinyou.asia"
-echo ""
-echo "查看日志: docker logs -f ancestor-admin"
-echo "重启服务: cd /opt/ancestor-admin && docker compose restart"
+# Snapshot after stopping the writer; never delete the live data directory.
+tar -czf "$base/backups/data-$stamp.tar.gz" -C "$base" data
+rollback() {
+  docker rm -f ancestor-admin >/dev/null 2>&1 || true
+  if $had_previous; then docker rename "$previous" ancestor-admin; docker start ancestor-admin; fi
+}
+trap rollback ERR
+docker run -d --name ancestor-admin --restart unless-stopped \
+  -p 127.0.0.1:8080:80 --env-file "$base/runtime.env" \
+  -v "$base/data:/app/data" "$image"
+healthy=false
+for i in {1..30}; do
+  if curl -fsS http://127.0.0.1:8080/api/service-config >/dev/null; then healthy=true; break; fi
+  sleep 2
+done
+$healthy
+printf '%s\n' "$image" > "$base/current-image"
+trap - ERR
+printf 'Deployment healthy: %s\n' "$image"
