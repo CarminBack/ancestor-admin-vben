@@ -1,264 +1,49 @@
-# 祭祖后台部署指南
+# 祭祖后台部署说明
 
-## 技术栈
+已部署版本：`106f89dd20d4e6d3c24d9a67004902e4b5210f29`。Actions运行：https://github.com/CarminBack/ancestor-admin-vben/actions/runs/34810887616 。
 
-### 前端
-- Vben Admin 5.0
-- Vue 3
-- TypeScript
-- Vite
-- Ant Design Vue
-- Pinia
-- Vue Router
+2026-09-14验收：镜像healthy、HTTPS有效、Chrome登录及核心页面、下单→待处理→确认付款→小程序状态同步通过；验收订单已取消。默认123456密码不可登录。服务器不能访问Docker Hub，但本次成功从GHCR拉取Actions镜像。
 
-### 后端 Mock
-- Nitro
-- SQLite (D1)
+镜像仅由 GitHub Actions 工作流 `.github/workflows/deploy.yml` 构建，目标 `linux/amd64`。本机和服务器均不构建 Docker 镜像。
 
-## 本地开发
+## 发布链路
 
-### 1. 安装依赖
+1. 将业务变更推送到 `CarminBack/ancestor-admin-vben` 的 main 分支。
+2. Actions 构建 `playground` 和 Nitro，启动镜像进行API及静态资源冒烟测试。
+3. Actions 发布到 `ghcr.io/carminback/ancestor-admin-vben:<完整提交SHA>`，并保存含SHA256校验和的镜像包为7天有效的Artifact。
+4. 服务器可以拉取GHCR时按固定SHA拉取；无法访问镜像仓库时下载Artifact，通过scp传入服务器并执行 `sha256sum -c`、`docker load`。
+5. 执行 `bash deploy.sh ghcr.io/carminback/ancestor-admin-vben:<SHA>`。禁止根据漂移的latest判断实际部署版本。
 
-```bash
-pnpm install
-```
+## 服务器
 
-### 2. 初始化数据库
+- SSH：本机 `ssh js`，目标 root@39.107.32.221。
+- 网站：https://js.mewinyou.asia
+- 管理后台部署在域名根路径，API `/api/*`。
+- 本地回环上游：127.0.0.1:8080，仅主机Nginx对公网提供服务。
+- 运行目录：`/opt/ancestor-admin`。
+- 业务数据：`/opt/ancestor-admin/data` → 容器 `/app/data`。
+- 环境凭据：`/opt/ancestor-admin/runtime.env`，权限600，不提交仓库。
+- 版本记录：`/opt/ancestor-admin/current-image`。
+- 备份：`/opt/ancestor-admin/backups/data-<时间>.tar.gz`。
 
-执行数据库脚本创建表和初始数据：
+## 登录和数据
 
-```bash
-# 在 backend-mock 的 SQLite 数据库中执行
-# apps/backend-mock/database/schema.sql - 创建表结构
-# apps/backend-mock/database/seed.sql - 插入初始数据
-```
+生产环境通过环境变量提供随机JWT密钥与管理员scrypt密码哈希。仅启用vben管理员，禁用内置演示账号密码。实际密码单独交付，不写入此文档。
 
-### 3. 启动开发服务器
+业务仍使用本地JSON持久化存储，适用于当前单实例联调。此前本机测试数据不自动复制到线上。客服配置首次为空，需在系统设置填写。微信支付尚未接入，付款为管理员人工确认；演示管理员/角色管理模块不视为已实现的生产账号管理。
 
-```bash
-# 启动前端和后端
-pnpm dev
+## TLS
 
-# 或分别启动
-pnpm dev:app      # 前端 (默认 5173)
-pnpm dev:backend  # 后端 (默认 6666)
-```
+Let's Encrypt证书由主机certbot webroot签发。路径 `/etc/letsencrypt/live/js.mewinyou.asia/`。HTTP的 `/.well-known/acme-challenge/` 保留用于续期，其他请求跳转HTTPS。
 
-### 4. 默认账号
+安装certbot.timer自动续期，并在deploy hook中执行 `nginx -t && systemctl reload nginx`。主机Nginx配置见 `deploy/host-nginx.conf`。
 
-管理员账号：
-- 超级管理员: `admin` / `admin123`
-- 祭祀管理员: `ritual` / `ritual123`
-- 商品管理员: `product` / `product123`
+## 回滚
 
-## 环境变量配置
+部署脚本在替换前停止旧写入进程、保留旧容器为 `ancestor-admin-rollback-<时间>` 并备份数据。新容器健康检查失败时自动恢复旧容器。首发失败时无旧应用可回滚，保留Nginx维护页面与数据。
 
-### 前端环境变量
+需要人工回滚时先查看旧容器及current-image，停止新容器并恢复旧容器名称。数据恢复属于独立操作，必须先确认备份和后续写入影响，不要直接删除data目录。
 
-创建 `apps/web-antd/.env.local`:
+## 验证边界
 
-```env
-# API 地址
-VITE_GLOB_API_URL=http://localhost:6666
-```
-
-### 后端环境变量
-
-创建 `apps/backend-mock/.env`:
-
-```env
-# 七牛云配置
-QINIU_ACCESS_KEY=your_access_key
-QINIU_SECRET_KEY=your_secret_key
-QINIU_BUCKET=your_bucket_name
-QINIU_DOMAIN=your_cdn_domain.com
-QINIU_REGION=z2  # z0=华东, z1=华北, z2=华南, na0=北美, as0=东南亚
-```
-
-## 生产部署
-
-### 前端构建
-
-```bash
-pnpm build
-
-# 构建产物在 apps/web-antd/dist
-```
-
-部署到：
-- Nginx
-- Vercel
-- Cloudflare Pages
-- 阿里云 OSS
-
-### 后端部署
-
-当前使用 Nitro mock server，生产环境需要：
-
-1. **替换为真实后端**
-   - Node.js + Express/Koa
-   - Java + Spring Boot
-   - Go + Gin
-   - Python + FastAPI
-
-2. **数据库迁移**
-   - 从 SQLite 迁移到 MySQL/PostgreSQL
-   - 执行 `apps/backend-mock/database/schema.sql`
-   - 执行 `apps/backend-mock/database/seed.sql`
-
-3. **对象存储配置**
-   - 配置七牛云/阿里云OSS/腾讯云COS
-   - 设置视频上传接口
-   - 配置签名URL生成
-
-4. **安全加固**
-   - 密码使用 bcrypt 加密
-   - JWT token 认证
-   - HTTPS 部署
-   - CORS 配置
-   - 接口频率限制
-   - SQL 注入防护
-
-## Nginx 配置示例
-
-```nginx
-server {
-    listen 80;
-    server_name ancestor.example.com;
-
-    # 前端静态文件
-    root /var/www/ancestor-admin/dist;
-    index index.html;
-
-    # SPA 路由
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # API 代理
-    location /api/ {
-        proxy_pass http://localhost:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    # 静态资源缓存
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
-```
-
-## 数据库表说明
-
-### 核心表
-
-1. **product_categories** - 商品分类
-2. **products** - 商品
-3. **product_orders** - 商品订单
-4. **product_order_items** - 商品订单明细
-5. **ritual_packages** - 祭祀套餐
-6. **ritual_orders** - 代祭祀订单
-7. **ritual_videos** - 祭祀视频
-8. **ritual_logs** - 祭祀操作日志
-9. **admins** - 管理员
-10. **system_settings** - 系统设置
-
-详见 `apps/backend-mock/database/schema.sql`
-
-## API 接口文档
-
-共 41 个接口，详见 `API_CHECKLIST.md`
-
-### 接口规范
-
-- 基础路径: `/api/ancestor/`
-- 认证方式: Bearer Token (生产环境)
-- 响应格式: JSON
-
-成功响应：
-```json
-{
-  "code": 0,
-  "data": {},
-  "message": "success"
-}
-```
-
-错误响应：
-```json
-{
-  "code": 1,
-  "message": "错误信息"
-}
-```
-
-## 权限说明
-
-### 角色定义
-
-1. **超级管理员 (SUPER_ADMIN)**
-   - 所有权限
-
-2. **祭祀管理员 (RITUAL_ADMIN)**
-   - 代祭祀订单管理
-   - 祭祀视频上传
-   - 祭祀记录查看
-
-3. **商品管理员 (PRODUCT_ADMIN)**
-   - 商品管理
-   - 商品分类管理
-   - 商品订单管理
-
-## 视频上传流程
-
-1. 前端请求七牛上传 token
-2. 前端直传视频到七牛云
-3. 上传成功后获得视频 URL
-4. 调用后端接口保存视频记录
-5. 生成签名 URL 供用户访问
-
-## 监控与日志
-
-建议生产环境配置：
-
-1. **应用监控**
-   - Sentry (错误追踪)
-   - 阿里云 ARMS
-   - 腾讯云应用性能监控
-
-2. **日志收集**
-   - ELK Stack
-   - 阿里云日志服务
-
-3. **性能监控**
-   - 接口响应时间
-   - 数据库慢查询
-   - 视频上传成功率
-
-## 常见问题
-
-### Q: 视频上传失败？
-A: 检查七牛云配置、网络连接、文件大小限制
-
-### Q: 姓名查询查不到记录？
-A: 确认订单状态为"已完成"、姓名完全匹配
-
-### Q: 权限验证失败？
-A: 检查 token 是否过期、角色权限是否正确
-
-### Q: 数据库连接失败？
-A: 检查数据库配置、网络连接、数据库服务状态
-
-## 技术支持
-
-如有问题，请查看：
-- `API_CHECKLIST.md` - 接口清单
-- `apps/backend-mock/database/schema.sql` - 数据库结构
-- 源码注释
-
-## License
-
-MIT
+GitHub镜像冒烟测试必须成功，部署后检查容器healthy、首页/JS资源、API响应、认证和HTTPS证书。仓库全量类型检查目前存在之前复制到演示应用的缺失依赖错误，不代表该检查通过；本次镜像只构建playground业务前端。

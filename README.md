@@ -1,4 +1,6 @@
-# 祭祖管理后台（本地联调）
+# 祭祖管理后台
+
+线上后台及API：https://js.mewinyou.asia 。镜像由GitHub Actions构建，生产部署说明见 [DEPLOYMENT.md](DEPLOYMENT.md)。本地开发地址保持如下。
 
 管理前端是 `playground/`，后端是 `apps/backend-mock/`（Nitro）。`apps/web-antd/` 不是当前业务入口。微信小程序独立位于 `/Users/carmin/Documents/祭祀/祭祀2`。
 
