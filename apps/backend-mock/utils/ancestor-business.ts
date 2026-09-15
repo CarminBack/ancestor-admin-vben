@@ -51,14 +51,25 @@ export function text(value: any, label: string, max = 50) {
     fail(`${label}不能为空且长度不能超过${max}`);
   return value.trim();
 }
-function date(value: any) {
+function date(value: any, label = '日期') {
   if (
     typeof value !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
     Number.isNaN(Date.parse(value)) ||
     new Date(value).toISOString().slice(0, 10) !== value
   )
-    fail('祭祀日期无效');
+    fail(`${label}格式错误`);
+  return value;
+}
+function notBeforeToday(value: string, label: string) {
+  if (value < new Date().toISOString().slice(0, 10)) fail(`${label}不能早于当天`);
+}
+function gender(value: any, label: string) {
+  if (value !== '男' && value !== '女') fail(`${label}必须为男或女`);
+  return value;
+}
+function time(value: any) {
+  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) fail('亡故人生辰时分格式错误');
   return value;
 }
 function timestamp() {
@@ -145,8 +156,22 @@ export function createOrder(event: H3Event, type: string) {
       };
       if (type === 'memorial') {
         o.customerName = text(body.customerName, '下单人');
+        o.customerGender = gender(body.customerGender, '阳上人性别');
+        o.customerBirthDate = date(body.customerBirthDate, '阳上人生辰');
+        if (o.customerBirthDate > new Date().toISOString().slice(0, 10)) fail('阳上人生辰不能晚于当天');
+        o.customerAddress = text(body.customerAddress, '阳上人地址', 200);
         o.deceasedName = text(body.deceasedName, '故人姓名');
-        o.memorialDate = date(body.memorialDate);
+        o.deceasedGender = gender(body.deceasedGender, '亡故人性别');
+        o.deceasedBirthDate = date(body.deceasedBirthDate, '亡故人生辰日期');
+        if (o.deceasedBirthDate > new Date().toISOString().slice(0, 10)) fail('亡故人生辰不能晚于当天');
+        o.deceasedBirthTime = time(body.deceasedBirthTime);
+        o.deceasedBirthDateTime = `${o.deceasedBirthDate} ${o.deceasedBirthTime}:00`;
+        if (body.deceasedBirthDateTime !== o.deceasedBirthDateTime) fail('亡故人完整生辰格式或内容不一致');
+        o.relationship = text(body.relationship, '关系', 30);
+        o.cemetery = text(body.cemetery, '墓地信息', 200);
+        o.memorialDate = date(body.memorialDate, '祭祀日期');
+        notBeforeToday(o.memorialDate, '代祭祀日期');
+        notBeforeToday(o.memorialDate, '代祭祀日期');
         const p = s.packages.find(
           (p) =>
             (body.packageId

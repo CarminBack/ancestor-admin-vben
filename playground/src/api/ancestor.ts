@@ -80,7 +80,16 @@ export interface RitualOrder {
   id: string;
   orderNo: string;
   orderName: string;
+  customerGender?: string;
+  customerBirthDate?: string;
+  customerAddress?: string;
   deceasedName: string;
+  deceasedGender?: string;
+  deceasedBirthDate?: string;
+  deceasedBirthTime?: string;
+  deceasedBirthDateTime?: string;
+  relationship?: string;
+  cemetery?: string;
   packageId: string;
   packageName: string;
   ritualDate: string;

@@ -127,7 +127,14 @@ const handleClose = () => {
         <Descriptions bordered :column="2">
           <DescriptionsItem label="订单编号" :span="2">{{ order.orderNo }}</DescriptionsItem>
           <DescriptionsItem label="下单人">{{ order.orderName }}</DescriptionsItem>
+          <DescriptionsItem label="下单人性别">{{ order.customerGender }}</DescriptionsItem>
+          <DescriptionsItem label="阳上人生辰">{{ order.customerBirthDate }}</DescriptionsItem>
+          <DescriptionsItem label="阳上人地址" :span="2">{{ order.customerAddress }}</DescriptionsItem>
           <DescriptionsItem label="亡故亲人">{{ order.deceasedName }}</DescriptionsItem>
+          <DescriptionsItem label="亡故人性别">{{ order.deceasedGender }}</DescriptionsItem>
+          <DescriptionsItem label="亡故人生辰">{{ order.deceasedBirthDate }} {{ order.deceasedBirthTime }}</DescriptionsItem>
+          <DescriptionsItem label="关系">{{ order.relationship }}</DescriptionsItem>
+          <DescriptionsItem label="墓地" :span="2">{{ order.cemetery }}</DescriptionsItem>
           <DescriptionsItem label="祭祀套餐">{{ order.packageName }}</DescriptionsItem>
           <DescriptionsItem label="祭祀日期">{{ order.ritualDate }}</DescriptionsItem>
           <DescriptionsItem label="订单金额" :span="2">

@@ -1,18 +1,24 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onActivated } from 'vue';
+import type { RitualOrder, RitualOrderDetail } from '#/api/ancestor';
+
+import { onActivated, onMounted, reactive, ref } from 'vue';
+
 import { Page } from '@vben/common-ui';
+
 import {
-  Card,
-  Table,
   Button,
+  Card,
+  DatePicker,
   Input,
-  Space,
-  Tag,
   message,
   Modal,
-  DatePicker,
+  Space,
+  Table,
+  Tag,
 } from 'antdv-next';
-import { ancestorApi, type RitualOrder, type RitualOrderDetail } from '#/api/ancestor';
+
+import { ancestorApi } from '#/api/ancestor';
+
 import OrderDetailModal from './components/OrderDetailModal.vue';
 
 const loading = ref(false);
@@ -44,9 +50,19 @@ const pagination = reactive({
 const columns = [
   { title: '祭祀编号', dataIndex: 'orderNo', key: 'orderNo', width: 150 },
   { title: '下单人', dataIndex: 'orderName', key: 'orderName', width: 100 },
-  { title: '亡故亲人', dataIndex: 'deceasedName', key: 'deceasedName', width: 100 },
+  {
+    title: '亡故亲人',
+    dataIndex: 'deceasedName',
+    key: 'deceasedName',
+    width: 100,
+  },
   { title: '祭祀日期', dataIndex: 'ritualDate', key: 'ritualDate', width: 120 },
-  { title: '祭祀套餐', dataIndex: 'packageName', key: 'packageName', width: 120 },
+  {
+    title: '祭祀套餐',
+    dataIndex: 'packageName',
+    key: 'packageName',
+    width: 120,
+  },
   { title: '视频数量', key: 'videoCount', width: 100 },
   { title: '状态', key: 'status', width: 100 },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
@@ -65,7 +81,9 @@ const statusTextMap: Record<string, string> = {
   PENDING_VIDEO: '待上传视频',
 };
 
-onActivated(() => { if (!loading.value) fetchRecords(); });
+onActivated(() => {
+  if (!loading.value) fetchRecords();
+});
 
 const fetchRecords = async () => {
   loading.value = true;
@@ -149,9 +167,14 @@ const handleSaveVideoTime = async () => {
       formattedTime = videoAvailableTime.value.format('YYYY-MM-DD HH:mm:ss');
     }
 
-    await ancestorApi.updateVideoAvailableTime(currentVideo.value.id, formattedTime);
+    await ancestorApi.updateVideoAvailableTime(
+      currentVideo.value.id,
+      formattedTime,
+    );
     if (currentRecord.value?.videos) {
-      const video = currentRecord.value.videos.find(v => v.id === currentVideo.value.id);
+      const video = currentRecord.value.videos.find(
+        (v) => v.id === currentVideo.value.id,
+      );
       if (video) {
         video.availableAt = formattedTime;
       }
@@ -179,8 +202,10 @@ const handleDeleteVideo = (video: any) => {
       try {
         await ancestorApi.deleteVideo(video.id);
         if (currentRecord.value?.videos) {
-          const index = currentRecord.value.videos.findIndex(v => v.id === video.id);
-          if (index > -1) {
+          const index = currentRecord.value.videos.findIndex(
+            (v) => v.id === video.id,
+          );
+          if (index !== -1) {
             currentRecord.value.videos.splice(index, 1);
             currentRecord.value.videoCount = currentRecord.value.videos.length;
           }
@@ -199,6 +224,10 @@ const handleDeleteVideo = (video: any) => {
 onMounted(() => {
   fetchRecords();
 });
+</script>
+
+<script lang="ts">
+export default { name: 'AncestorRitualRecords' };
 </script>
 
 <template>
@@ -238,7 +267,7 @@ onMounted(() => {
         :pagination="{
           current: pagination.current,
           pageSize: pagination.pageSize,
-          total: total,
+          total,
           showSizeChanger: true,
           showTotal: (total: number) => `共 ${total} 条`,
         }"
@@ -248,7 +277,9 @@ onMounted(() => {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'videoCount'">
-            <Tag v-if="record.videoCount > 0" color="green">{{ record.videoCount }} 个视频</Tag>
+            <Tag v-if="record.videoCount > 0" color="green">
+{{ record.videoCount }} 个视频
+</Tag>
             <Tag v-else color="default">未上传</Tag>
           </template>
           <template v-if="column.key === 'status'">
@@ -258,7 +289,11 @@ onMounted(() => {
           </template>
           <template v-if="column.key === 'action'">
             <Space>
-              <Button type="link" size="small" @click="handleViewVideos(record)">
+              <Button
+                type="link"
+                size="small"
+                @click="handleViewVideos(record)"
+              >
                 查看视频
               </Button>
             </Space>
@@ -311,16 +346,11 @@ onMounted(() => {
           :src="currentVideoUrl"
           controls
           class="video-player"
-        />
+        ></video>
       </div>
     </Modal>
   </Page>
 </template>
-
-<script lang="ts">
-import { h } from 'vue';
-export default { name: 'AncestorRitualRecords' };
-</script>
 
 <style scoped>
 .search-form {
@@ -329,13 +359,13 @@ export default { name: 'AncestorRitualRecords' };
 
 .search-item {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
 }
 
 .search-item label {
-  white-space: nowrap;
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .mt-4 {
@@ -351,9 +381,9 @@ export default { name: 'AncestorRitualRecords' };
 }
 
 .price {
-  color: #f5222d;
-  font-weight: 600;
   font-size: 16px;
+  font-weight: 600;
+  color: #f5222d;
 }
 
 .detail-container {
@@ -368,15 +398,15 @@ export default { name: 'AncestorRitualRecords' };
 }
 
 .video-card {
+  overflow: hidden;
+  background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  overflow: hidden;
   transition: all 0.3s ease;
-  background: #fff;
 }
 
 .video-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
   transform: translateY(-2px);
 }
 
@@ -384,9 +414,9 @@ export default { name: 'AncestorRitualRecords' };
   position: relative;
   width: 100%;
   padding-bottom: 56.25%; /* 16:9 aspect ratio */
-  background: #000;
-  cursor: pointer;
   overflow: hidden;
+  cursor: pointer;
+  background: #000;
 }
 
 .thumbnail-video {
@@ -400,25 +430,22 @@ export default { name: 'AncestorRitualRecords' };
 
 .play-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgb(0 0 0 / 30%);
   transition: all 0.3s ease;
-  z-index: 1;
 }
 
 .video-thumbnail:hover .play-overlay {
-  background: rgba(0, 0, 0, 0.5);
+  background: rgb(0 0 0 / 50%);
 }
 
 .play-icon {
   font-size: 48px;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgb(255 255 255 / 90%);
   transition: all 0.3s ease;
 }
 
@@ -429,19 +456,16 @@ export default { name: 'AncestorRitualRecords' };
 
 .video-locked {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
+  gap: 8px;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-  color: #fff;
   font-size: 12px;
-  gap: 8px;
-  z-index: 2;
+  color: #fff;
+  background: rgb(0 0 0 / 75%);
 }
 
 .video-locked .anticon {
@@ -449,18 +473,18 @@ export default { name: 'AncestorRitualRecords' };
 }
 
 .video-info {
-  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 12px;
 }
 
 .video-time {
   display: flex;
   align-items: center;
+  min-height: 20px;
   font-size: 12px;
   color: #6b7280;
-  min-height: 20px;
 }
 
 .empty-placeholder {
@@ -473,8 +497,8 @@ export default { name: 'AncestorRitualRecords' };
 }
 
 .empty-icon {
-  font-size: 48px;
   margin-bottom: 12px;
+  font-size: 48px;
   opacity: 0.5;
 }
 
@@ -487,9 +511,9 @@ export default { name: 'AncestorRitualRecords' };
 }
 
 .empty-log {
-  text-align: center;
   padding: 20px;
   color: #9ca3af;
+  text-align: center;
 }
 
 .text-gray {
@@ -533,14 +557,14 @@ export default { name: 'AncestorRitualRecords' };
 }
 
 .video-player-wrapper {
-  background: #000;
-  border-radius: 8px;
-  overflow: hidden;
-  width: 100%;
-  height: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 500px;
+  overflow: hidden;
+  background: #000;
+  border-radius: 8px;
 }
 
 .video-player {

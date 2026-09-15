@@ -1,33 +1,38 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onActivated, h } from 'vue';
+import type { RitualOrder, RitualOrderDetail } from '#/api/ancestor';
+
+import { h, onActivated, onMounted, reactive, ref, computed } from 'vue';
+
 import { Page } from '@vben/common-ui';
+
 import {
-  Card,
-  Table,
   Button,
+  Card,
+  DatePicker,
   Input,
+  message,
+  Modal,
   Select,
   Space,
+  Table,
   Tag,
-  Modal,
-  Descriptions,
-  DescriptionsItem,
-  Steps,
-  Timeline,
-  TimelineItem,
   Upload,
-  message,
-  DatePicker,
 } from 'antdv-next';
-import { ancestorApi, type RitualOrder, type RitualOrderDetail, RitualStatus } from '#/api/ancestor';
+
+import { ancestorApi, RitualStatus } from '#/api/ancestor';
 import { uploadRitualVideo } from '#/utils/ritual-video-upload';
+
 import OrderDetailModal from './components/OrderDetailModal.vue';
 
 // 图标组件
-const PlayCircleOutlined = () => h('span', { class: 'i-ant-design:play-circle-outlined' });
-const ClockCircleOutlined = () => h('span', { class: 'i-ant-design:clock-circle-outlined' });
-const DeleteOutlined = () => h('span', { class: 'i-ant-design:delete-outlined' });
-const VideoCameraOutlined = () => h('span', { class: 'i-ant-design:video-camera-outlined' });
+const PlayCircleOutlined = () =>
+  h('span', { class: 'i-ant-design:play-circle-outlined' });
+const ClockCircleOutlined = () =>
+  h('span', { class: 'i-ant-design:clock-circle-outlined' });
+const DeleteOutlined = () =>
+  h('span', { class: 'i-ant-design:delete-outlined' });
+const VideoCameraOutlined = () =>
+  h('span', { class: 'i-ant-design:video-camera-outlined' });
 
 const loading = ref(false);
 const orders = ref<RitualOrder[]>([]);
@@ -61,7 +66,14 @@ const pagination = reactive({
 const columns = [
   { title: '订单编号', dataIndex: 'orderNo', key: 'orderNo', width: 150 },
   { title: '下单人', dataIndex: 'orderName', key: 'orderName', width: 100 },
+  { title: '阳上人性别', dataIndex: 'customerGender', key: 'customerGender', width: 100 },
+  { title: '阳上人生辰', dataIndex: 'customerBirthDate', key: 'customerBirthDate', width: 130 },
+  { title: '阳上人地址', dataIndex: 'customerAddress', key: 'customerAddress', width: 220 },
   { title: '亡故亲人', dataIndex: 'deceasedName', key: 'deceasedName', width: 100 },
+  { title: '亡故人性别', dataIndex: 'deceasedGender', key: 'deceasedGender', width: 100 },
+  { title: '亡故人生辰', dataIndex: 'deceasedBirthDateTime', key: 'deceasedBirthDateTime', width: 170 },
+  { title: '关系', dataIndex: 'relationship', key: 'relationship', width: 100 },
+  { title: '墓地', dataIndex: 'cemetery', key: 'cemetery', width: 220 },
   { title: '祭祀套餐', dataIndex: 'packageName', key: 'packageName', width: 120 },
   { title: '祭祀日期', dataIndex: 'ritualDate', key: 'ritualDate', width: 120 },
   { title: '金额', dataIndex: 'amount', key: 'amount', width: 100 },
@@ -70,6 +82,17 @@ const columns = [
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
   { title: '操作', key: 'action', width: 260, fixed: 'right' },
 ];
+
+const visibleColumnKeys = ref<string[]>(JSON.parse(localStorage.getItem('ancestor-ritual-columns') || '[]'));
+const columnOptions = columns.filter((column) => !['status', 'action'].includes(column.key)).map((column) => ({ label: column.title, value: column.key }));
+const tableColumns = computed(() => {
+  if (!visibleColumnKeys.value.length) return columns;
+  return columns.filter((column) => visibleColumnKeys.value.includes(column.key) || ['status', 'action'].includes(column.key));
+});
+const saveVisibleColumns = (keys: string[]) => {
+  visibleColumnKeys.value = keys;
+  localStorage.setItem('ancestor-ritual-columns', JSON.stringify(keys));
+};
 
 const statusColorMap: Record<string, string> = {
   PENDING_PAYMENT: 'default',
@@ -116,10 +139,12 @@ const getStepStatus = (currentStatus: string, stepStatus: string) => {
 
 const getCurrentStep = (status: string) => {
   const index = statusSteps.findIndex((s) => s.status === status);
-  return index >= 0 ? index : 0;
+  return index !== -1 ? index : 0;
 };
 
-onActivated(() => { if (!loading.value) fetchOrders(); });
+onActivated(() => {
+  if (!loading.value) fetchOrders();
+});
 
 const fetchOrders = async () => {
   loading.value = true;
@@ -179,7 +204,9 @@ const handleUpdateStatus = (orderId: string, newStatus: string) => {
     content: `确定要将订单状态更新为"${statusTextMap[newStatus]}"吗？`,
     onOk: async () => {
       try {
-        await ancestorApi.updateRitualOrder(orderId, { status: newStatus as RitualStatus });
+        await ancestorApi.updateRitualOrder(orderId, {
+          status: newStatus as RitualStatus,
+        });
         message.success('状态更新成功');
         if (currentOrder.value) {
           const res = await ancestorApi.getRitualOrder(orderId);
@@ -194,7 +221,7 @@ const handleUpdateStatus = (orderId: string, newStatus: string) => {
   });
 };
 
-const getNextStatus = (currentStatus: string): string | null => {
+const getNextStatus = (currentStatus: string): null | string => {
   const statusFlow: Record<string, string> = {
     PAID: 'PREPARING',
     PENDING_RITUAL: 'PREPARING',
@@ -218,7 +245,14 @@ const getUploadButtonText = (status: string): string => {
 
 // 判断是否显示上传视频按钮
 const shouldShowUploadButton = (status: string): boolean => {
-  return ['PAID', 'PENDING_RITUAL', 'PREPARING', 'PACKAGING', 'BURNING', 'PENDING_VIDEO'].includes(status);
+  return [
+    'BURNING',
+    'PACKAGING',
+    'PAID',
+    'PENDING_RITUAL',
+    'PENDING_VIDEO',
+    'PREPARING',
+  ].includes(status);
 };
 
 // 上传视频
@@ -259,8 +293,12 @@ const customRequest = async (options: any) => {
 
     // 调用后端 API 保存视频记录，标记视频所属阶段
     const videoData = {
-      videoUrl: videoUrl,
-      stage: ['PAID', 'PENDING_RITUAL'].includes(uploadStage.value || uploadingOrder.value!.status) ? 'PREPARING' : (uploadStage.value || uploadingOrder.value!.status),
+      videoUrl,
+      stage: ['PAID', 'PENDING_RITUAL'].includes(
+        uploadStage.value || uploadingOrder.value!.status,
+      )
+        ? 'PREPARING'
+        : uploadStage.value || uploadingOrder.value!.status,
     };
 
     await ancestorApi.addRitualOrderVideo(uploadingOrder.value!.id, videoData);
@@ -274,8 +312,10 @@ const customRequest = async (options: any) => {
     fileList.value = [];
     uploadProgress.value = 0;
     await fetchOrders();
-    if (currentOrder.value?.id === uploadingOrder.value?.id) currentOrder.value = await ancestorApi.getRitualOrder(uploadingOrder.value!.id);
-
+    if (currentOrder.value?.id === uploadingOrder.value?.id)
+      currentOrder.value = await ancestorApi.getRitualOrder(
+        uploadingOrder.value!.id,
+      );
   } catch (error: any) {
     console.error('视频上传失败:', error);
     console.error('错误详情:', {
@@ -323,7 +363,7 @@ const handleCloseUpload = () => {
 // 按类型过滤视频
 const getVideosByType = (type: string) => {
   if (!currentOrder.value?.videos) return [];
-  return currentOrder.value.videos.filter(video => video.stage === type);
+  return currentOrder.value.videos.filter((video) => video.stage === type);
 };
 
 // 自动更新订单状态
@@ -332,32 +372,52 @@ const autoUpdateOrderStatus = async () => {
   const id = uploadingOrder.value.id;
   try {
     const detail = await ancestorApi.getRitualOrder(id);
-    const stage = ['PAID', 'PENDING_RITUAL'].includes(uploadStage.value) ? 'PREPARING' : uploadStage.value;
-    const next = ({ PREPARING: 'PACKAGING', PACKAGING: 'BURNING', BURNING: 'COMPLETED' } as Record<string, string>)[stage];
-    if (!detail.videos.some(v => v.stage === stage) && detail.status !== 'PENDING_VIDEO') {
+    const stage = ['PAID', 'PENDING_RITUAL'].includes(uploadStage.value)
+      ? 'PREPARING'
+      : uploadStage.value;
+    const next = (
+      {
+        PREPARING: 'PACKAGING',
+        PACKAGING: 'BURNING',
+        BURNING: 'COMPLETED',
+      } as Record<string, string>
+    )[stage];
+    if (
+      !detail.videos.some((v) => v.stage === stage) &&
+      detail.status !== 'PENDING_VIDEO'
+    ) {
       message.warning('请先上传当前阶段的视频');
       return;
     }
     const refresh = async () => {
       handleCloseUpload();
       await fetchOrders();
-      if (currentOrder.value?.id === id) currentOrder.value = await ancestorApi.getRitualOrder(id);
+      if (currentOrder.value?.id === id)
+        currentOrder.value = await ancestorApi.getRitualOrder(id);
     };
-    if (!next) { await refresh(); return; }
+    if (!next) {
+      await refresh();
+      return;
+    }
     Modal.confirm({
       title: next === 'COMPLETED' ? '确认完成祭祀' : '确认进入下一步',
       content: `视频已保存，是否进入下一步：${statusTextMap[next]}？`,
-      okText: '确认', cancelText: '稍后',
+      okText: '确认',
+      cancelText: '稍后',
       onOk: async () => {
         try {
           await ancestorApi.confirmRitualVideo(id, stage);
           await refresh();
           message.success('状态更新成功');
-        } catch { message.error('状态更新失败，请刷新后重试'); }
+        } catch {
+          message.error('状态更新失败，请刷新后重试');
+        }
       },
       onCancel: refresh,
     });
-  } catch { message.error('获取订单状态失败'); }
+  } catch {
+    message.error('获取订单状态失败');
+  }
 };
 
 // 确认上传完成
@@ -419,11 +479,16 @@ const handleSaveVideoTime = async () => {
       formattedTime = videoAvailableTime.value.format('YYYY-MM-DD HH:mm:ss');
     }
 
-    await ancestorApi.updateVideoAvailableTime(currentVideo.value.id, formattedTime);
+    await ancestorApi.updateVideoAvailableTime(
+      currentVideo.value.id,
+      formattedTime,
+    );
 
     // 临时更新本地数据
     if (currentOrder.value?.videos) {
-      const video = currentOrder.value.videos.find(v => v.id === currentVideo.value.id);
+      const video = currentOrder.value.videos.find(
+        (v) => v.id === currentVideo.value.id,
+      );
       if (video) {
         video.availableAt = formattedTime;
       }
@@ -453,8 +518,10 @@ const handleDeleteVideo = (video: any) => {
 
         // 临时更新本地数据
         if (currentOrder.value?.videos) {
-          const index = currentOrder.value.videos.findIndex(v => v.id === video.id);
-          if (index > -1) {
+          const index = currentOrder.value.videos.findIndex(
+            (v) => v.id === video.id,
+          );
+          if (index !== -1) {
             currentOrder.value.videos.splice(index, 1);
             currentOrder.value.videoCount = currentOrder.value.videos.length;
           }
@@ -480,7 +547,9 @@ const handleCancelRitual = (record: RitualOrder) => {
     cancelText: '我再想想',
     onOk: async () => {
       try {
-        await ancestorApi.updateRitualOrder(record.id, { status: RitualStatus.CANCELLED });
+        await ancestorApi.updateRitualOrder(record.id, {
+          status: RitualStatus.CANCELLED,
+        });
         message.success('已取消祭祀');
         fetchOrders();
       } catch (error) {
@@ -494,6 +563,10 @@ const handleCancelRitual = (record: RitualOrder) => {
 onMounted(() => {
   fetchOrders();
 });
+</script>
+
+<script lang="ts">
+export default { name: 'AncestorRitualOrders' };
 </script>
 
 <template>
@@ -551,14 +624,25 @@ onMounted(() => {
       </div>
 
       <!-- 表格 -->
+      <Space class="mb-4">
+        <span>列表字段：</span>
+        <Select
+          mode="multiple"
+          :value="visibleColumnKeys"
+          :options="columnOptions"
+          placeholder="选择显示字段"
+          style="min-width: 320px"
+          @change="saveVisibleColumns"
+        />
+      </Space>
       <Table
-        :columns="columns"
+        :columns="tableColumns"
         :data-source="orders"
         :loading="loading"
         :pagination="{
           current: pagination.current,
           pageSize: pagination.pageSize,
-          total: total,
+          total,
           showSizeChanger: true,
           showTotal: (total: number) => `共 ${total} 条`,
         }"
@@ -576,7 +660,9 @@ onMounted(() => {
             </Tag>
           </template>
           <template v-if="column.key === 'videoCount'">
-            <Tag v-if="record.videoCount > 0" color="green">{{ record.videoCount }} 个</Tag>
+            <Tag v-if="record.videoCount > 0" color="green">
+{{ record.videoCount }} 个
+</Tag>
             <Tag v-else color="default">未上传</Tag>
           </template>
           <template v-if="column.key === 'action'">
@@ -607,7 +693,9 @@ onMounted(() => {
       v-model:visible="detailVisible"
       :order="currentOrder"
       :show-operations="true"
-      :show-upload-buttons="!!currentOrder && shouldShowUploadButton(currentOrder.status)"
+      :show-upload-buttons="
+        !!currentOrder && shouldShowUploadButton(currentOrder.status)
+      "
       @upload-video="handleUploadVideoByStage"
       @view-video="handleViewVideo"
       @set-video-time="handleSetVideoTime"
@@ -618,10 +706,12 @@ onMounted(() => {
     <!-- 视频上传弹窗 -->
     <Modal
       v-model:open="uploadVisible"
-      :title="uploadingOrder ? getUploadButtonText(uploadingOrder.status) : '上传视频'"
+      :title="
+        uploadingOrder ? getUploadButtonText(uploadingOrder.status) : '上传视频'
+      "
       :width="600"
       :closable="!uploading"
-      :maskClosable="!uploading"
+      :mask-closable="!uploading"
       @cancel="handleCloseUpload"
     >
       <div class="upload-container">
@@ -643,7 +733,7 @@ onMounted(() => {
           <div class="progress-bar">
             <div
               class="progress-bar-inner"
-              :style="{ width: uploadProgress + '%' }"
+              :style="{ width: `${uploadProgress }%` }"
             ></div>
           </div>
         </div>
@@ -660,7 +750,11 @@ onMounted(() => {
           <Button @click="handleCloseUpload" :disabled="uploading">
             取消
           </Button>
-          <Button type="primary" @click="handleConfirmUpload" :disabled="uploading">
+          <Button
+            type="primary"
+            @click="handleConfirmUpload"
+            :disabled="uploading"
+          >
             确认
           </Button>
         </Space>
@@ -724,10 +818,6 @@ onMounted(() => {
   </Page>
 </template>
 
-<script lang="ts">
-export default { name: 'AncestorRitualOrders' };
-</script>
-
 <style scoped>
 .search-form {
   margin-bottom: 16px;
@@ -735,13 +825,13 @@ export default { name: 'AncestorRitualOrders' };
 
 .search-item {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
 }
 
 .search-item label {
-  white-space: nowrap;
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .mt-4 {
@@ -753,9 +843,9 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .price {
-  color: #d97706;
-  font-weight: 500;
   font-size: 16px;
+  font-weight: 500;
+  color: #d97706;
 }
 
 .detail-container {
@@ -764,19 +854,19 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .video-item {
-  padding: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
 }
 
 .empty-video,
 .empty-log {
-  text-align: center;
   padding: 40px 0;
   color: #999;
+  text-align: center;
 }
 
 .text-center {
@@ -784,8 +874,8 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .text-gray {
-  color: #6b7280;
   margin: 4px 0;
+  color: #6b7280;
 }
 
 .text-sm {
@@ -801,18 +891,18 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .progress-text {
-  text-align: center;
   margin-bottom: 10px;
   font-size: 14px;
   color: #1890ff;
+  text-align: center;
 }
 
 .progress-bar {
   width: 100%;
   height: 20px;
+  overflow: hidden;
   background-color: #f0f0f0;
   border-radius: 10px;
-  overflow: hidden;
 }
 
 .progress-bar-inner {
@@ -822,12 +912,12 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .upload-tips {
-  margin-top: 20px;
   padding: 12px;
-  background-color: #f6f8fa;
-  border-radius: 4px;
+  margin-top: 20px;
   font-size: 12px;
   color: #666;
+  background-color: #f6f8fa;
+  border-radius: 4px;
 }
 
 .upload-tips p {
@@ -842,15 +932,15 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .video-card {
+  overflow: hidden;
+  background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  overflow: hidden;
   transition: all 0.3s ease;
-  background: #fff;
 }
 
 .video-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
   transform: translateY(-2px);
 }
 
@@ -858,9 +948,9 @@ export default { name: 'AncestorRitualOrders' };
   position: relative;
   width: 100%;
   padding-bottom: 56.25%; /* 16:9 aspect ratio */
-  background: #000;
-  cursor: pointer;
   overflow: hidden;
+  cursor: pointer;
+  background: #000;
 }
 
 .thumbnail-video {
@@ -874,25 +964,22 @@ export default { name: 'AncestorRitualOrders' };
 
 .play-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgb(0 0 0 / 30%);
   transition: all 0.3s ease;
-  z-index: 1;
 }
 
 .video-thumbnail:hover .play-overlay {
-  background: rgba(0, 0, 0, 0.5);
+  background: rgb(0 0 0 / 50%);
 }
 
 .play-icon {
   font-size: 48px;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgb(255 255 255 / 90%);
   transition: all 0.3s ease;
 }
 
@@ -903,10 +990,7 @@ export default { name: 'AncestorRitualOrders' };
 
 .thumbnail-placeholder {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -915,19 +999,16 @@ export default { name: 'AncestorRitualOrders' };
 
 .video-locked {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
+  gap: 8px;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-  color: #fff;
   font-size: 12px;
-  gap: 8px;
-  z-index: 2;
+  color: #fff;
+  background: rgb(0 0 0 / 75%);
 }
 
 .video-locked .anticon {
@@ -935,18 +1016,18 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .video-info {
-  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 12px;
 }
 
 .video-time {
   display: flex;
   align-items: center;
+  min-height: 20px;
   font-size: 12px;
   color: #6b7280;
-  min-height: 20px;
 }
 
 .video-button-row {
@@ -957,13 +1038,13 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .video-button-row .ant-btn {
-  flex: 1;
-  height: 32px;
-  font-size: 12px;
   display: flex;
+  flex: 1;
+  gap: 4px;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  height: 32px;
+  font-size: 12px;
 }
 
 .video-button-group {
@@ -982,16 +1063,16 @@ export default { name: 'AncestorRitualOrders' };
 
 .video-actions {
   display: flex;
-  justify-content: flex-end;
   gap: 4px;
-  border-top: 1px solid #f3f4f6;
+  justify-content: flex-end;
   padding-top: 8px;
   margin-top: 4px;
+  border-top: 1px solid #f3f4f6;
 }
 
 .video-actions .ant-btn-link {
-  padding: 4px 8px;
   height: auto;
+  padding: 4px 8px;
 }
 
 .empty-placeholder {
@@ -1004,8 +1085,8 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .empty-icon {
-  font-size: 48px;
   margin-bottom: 12px;
+  font-size: 48px;
   opacity: 0.5;
 }
 
@@ -1018,14 +1099,14 @@ export default { name: 'AncestorRitualOrders' };
 }
 
 .video-player-wrapper {
-  background: #000;
-  border-radius: 8px;
-  overflow: hidden;
-  width: 100%;
-  height: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 500px;
+  overflow: hidden;
+  background: #000;
+  border-radius: 8px;
 }
 
 .video-player {
