@@ -65,7 +65,7 @@ const pagination = reactive({
 
 const columns = [
   { title: '订单编号', dataIndex: 'orderNo', key: 'orderNo', width: 150 },
-  { title: '下单人', dataIndex: 'orderName', key: 'orderName', width: 100 },
+  { title: '阳上人', dataIndex: 'orderName', key: 'orderName', width: 100 },
   { title: '阳上人性别', dataIndex: 'customerGender', key: 'customerGender', width: 100 },
   { title: '阳上人生辰', dataIndex: 'customerBirthDate', key: 'customerBirthDate', width: 130 },
   { title: '阳上人地址', dataIndex: 'customerAddress', key: 'customerAddress', width: 220 },
@@ -79,7 +79,7 @@ const columns = [
   { title: '金额', dataIndex: 'amount', key: 'amount', width: 100 },
   { title: '状态', key: 'status', width: 120 },
   { title: '视频', key: 'videoCount', width: 80 },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
+  { title: '备注', dataIndex: 'remark', key: 'remark', width: 220 },
   { title: '操作', key: 'action', width: 260, fixed: 'right' },
 ];
 
@@ -585,10 +585,10 @@ export default { name: 'AncestorRitualOrders' };
             />
           </div>
           <div class="search-item">
-            <label>下单人</label>
+            <label>阳上人</label>
             <Input
               v-model:value="searchForm.orderName"
-              placeholder="请输入下单人姓名"
+              placeholder="请输入阳上人姓名"
               style="width: 150px"
               @press-enter="handleSearch"
             />

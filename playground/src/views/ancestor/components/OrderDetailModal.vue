@@ -126,7 +126,7 @@ const handleClose = () => {
       <Card title="订单信息" :bordered="false" class="mb-4">
         <Descriptions bordered :column="2">
           <DescriptionsItem label="订单编号" :span="2">{{ order.orderNo }}</DescriptionsItem>
-          <DescriptionsItem label="下单人">{{ order.orderName }}</DescriptionsItem>
+          <DescriptionsItem label="阳上人">{{ order.orderName }}</DescriptionsItem>
           <DescriptionsItem label="下单人性别">{{ order.customerGender }}</DescriptionsItem>
           <DescriptionsItem label="阳上人生辰">{{ order.customerBirthDate }}</DescriptionsItem>
           <DescriptionsItem label="阳上人地址" :span="2">{{ order.customerAddress }}</DescriptionsItem>
@@ -152,8 +152,8 @@ const handleClose = () => {
           <DescriptionsItem v-if="order.completedAt" label="完成时间" :span="2">
             {{ order.completedAt }}
           </DescriptionsItem>
-          <DescriptionsItem v-if="order.remark" label="备注" :span="2">
-            {{ order.remark }}
+          <DescriptionsItem v-if="order.remark !== undefined" label="备注" :span="2">
+            {{ order.remark || '无' }}
           </DescriptionsItem>
         </Descriptions>
       </Card>

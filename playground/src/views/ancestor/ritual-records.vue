@@ -49,7 +49,7 @@ const pagination = reactive({
 
 const columns = [
   { title: '祭祀编号', dataIndex: 'orderNo', key: 'orderNo', width: 150 },
-  { title: '下单人', dataIndex: 'orderName', key: 'orderName', width: 100 },
+  { title: '阳上人', dataIndex: 'orderName', key: 'orderName', width: 100 },
   {
     title: '亡故亲人',
     dataIndex: 'deceasedName',
@@ -65,7 +65,7 @@ const columns = [
   },
   { title: '视频数量', key: 'videoCount', width: 100 },
   { title: '状态', key: 'status', width: 100 },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
+  { title: '备注', dataIndex: 'remark', key: 'remark', width: 220 },
   { title: '操作', key: 'action', width: 150, fixed: 'right' },
 ];
 
@@ -237,10 +237,10 @@ export default { name: 'AncestorRitualRecords' };
       <div class="search-form">
         <Space :size="16" wrap>
           <div class="search-item">
-            <label>下单人姓名</label>
+            <label>阳上人姓名</label>
             <Input
               v-model:value="searchForm.orderName"
-              placeholder="请输入下单人姓名"
+              placeholder="请输入阳上人姓名"
               style="width: 180px"
               @press-enter="handleSearch"
             />

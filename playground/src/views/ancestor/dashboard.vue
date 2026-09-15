@@ -9,7 +9,7 @@ const overview = ref<DashboardOverview>();
 
 const ritualColumns = [
   { title: '订单编号', dataIndex: 'orderNo', key: 'orderNo', width: 150 },
-  { title: '下单人', dataIndex: 'orderName', key: 'orderName', width: 100 },
+  { title: '阳上人', dataIndex: 'orderName', key: 'orderName', width: 100 },
   { title: '亡故亲人', dataIndex: 'deceasedName', key: 'deceasedName', width: 100 },
   { title: '祭祀套餐', dataIndex: 'packageName', key: 'packageName', width: 120 },
   { title: '祭祀日期', dataIndex: 'ritualDate', key: 'ritualDate', width: 120 },

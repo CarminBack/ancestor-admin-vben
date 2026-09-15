@@ -25,7 +25,7 @@
                 {{ getStatusText(orderData.status) }}
               </Tag>
             </DescriptionsItem>
-            <DescriptionsItem label="下单人">
+            <DescriptionsItem label="阳上人">
               {{ orderData.orderName }}
             </DescriptionsItem>
             <DescriptionsItem label="联系电话">
@@ -49,9 +49,9 @@
             <DescriptionsItem label="支付时间">
               {{ orderData.paidAt || '-' }}
             </DescriptionsItem>
-            <DescriptionsItem v-if="orderData.remark" label="备注" :span="2">
-              {{ orderData.remark }}
-            </DescriptionsItem>
+          <DescriptionsItem v-if="orderData.remark !== undefined" label="备注" :span="2">
+            {{ orderData.remark || '无' }}
+          </DescriptionsItem>
           </Descriptions>
         </Card>
 

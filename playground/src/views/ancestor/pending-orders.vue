@@ -14,7 +14,7 @@
             />
             <Input
               v-model:value="ritualSearch.orderName"
-              placeholder="下单人姓名"
+              placeholder="阳上人姓名"
               class="w-48"
               allow-clear
               @pressEnter="loadRitualOrders"
