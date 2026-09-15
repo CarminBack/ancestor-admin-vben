@@ -89,9 +89,68 @@ const tableColumns = computed(() => {
   if (!visibleColumnKeys.value.length) return columns;
   return columns.filter((column) => visibleColumnKeys.value.includes(column.key) || ['status', 'action'].includes(column.key));
 });
+const createJson = ref('');
 const saveVisibleColumns = (keys: string[]) => {
   visibleColumnKeys.value = keys;
   localStorage.setItem('ancestor-ritual-columns', JSON.stringify(keys));
+};
+const fieldAliases: Record<string, string> = {
+  阳上人: 'customerName', 下单人: 'customerName', 客户姓名: 'customerName', 阳上人姓名: 'customerName',
+  阳上人性别: 'customerGender', 阳上人出生日期: 'customerBirthDate', 阳上人生辰: 'customerBirthDate',
+  阳上人地址: 'customerAddress', 常住地址: 'customerAddress', 亡故人: 'deceasedName', 故人: 'deceasedName', 逝者: 'deceasedName', 亡故人姓名: 'deceasedName',
+  亡故人性别: 'deceasedGender', 亡故人出生日期: 'deceasedBirthDate', 亡故人生辰日期: 'deceasedBirthDate',
+  亡故人出生时间: 'deceasedBirthTime', 亡故人生辰时间: 'deceasedBirthTime', 关系: 'relationship', 与故人关系: 'relationship',
+  墓地: 'cemetery', 墓园: 'cemetery', 墓位: 'cemetery', 祭祀日期: 'memorialDate', 代祭日期: 'memorialDate',
+  套餐: 'packageName', 祭祀套餐: 'packageName', 价格: 'packagePrice', 套餐价格: 'packagePrice', 金额: 'packagePrice', 备注: 'note', 说明: 'note', 要求: 'note',
+};
+const parseCreateJson = () => {
+  try {
+    const raw = createJson.value.trim();
+    let parsed: Record<string, any>;
+    try { parsed = JSON.parse(raw); }
+    catch {
+      parsed = {};
+      raw.split(/\r?\n/).forEach((line) => {
+        const match = line.match(/^\s*([^:：]+)\s*[:：]\s*(.*?)\s*$/);
+        if (match) parsed[fieldAliases[match[1].trim()] || match[1].trim()] = match[2].trim();
+      });
+    }
+    if (!parsed || Array.isArray(parsed) || !Object.keys(parsed).length) throw new Error();
+    Object.keys(createForm).forEach((key) => { if (parsed[key] !== undefined) createForm[key] = parsed[key]; });
+    if (createForm.deceasedBirthDate && createForm.deceasedBirthTime) createForm.deceasedBirthDateTime = `${createForm.deceasedBirthDate} ${createForm.deceasedBirthTime}:00`;
+    message.success('已自动识别并填充订单字段');
+  } catch { message.error('无法识别内容，请使用 JSON 或“字段：内容”格式'); }
+};
+const createVisible = ref(false);
+const createSubmitting = ref(false);
+const createForm = reactive<Record<string, any>>({
+  customerName: '', customerGender: '男', customerBirthDate: '', customerAddress: '',
+  deceasedName: '', deceasedGender: '男', deceasedBirthDate: '', deceasedBirthTime: '', deceasedBirthDateTime: '',
+  relationship: '', cemetery: '', memorialDate: '', packageName: '', packagePrice: undefined, note: '',
+});
+const today = new Date().toISOString().slice(0, 10);
+const openCreate = () => { createForm.memorialDate = today; createVisible.value = true; };
+const validateCreate = () => {
+  const required: [string, string][] = [
+    ['customerName', '请填写阳上人姓名'], ['customerGender', '请选择阳上人性别'], ['customerBirthDate', '请选择阳上人生辰'], ['customerAddress', '请填写阳上人地址'],
+    ['deceasedName', '请填写亡故人姓名'], ['deceasedGender', '请选择亡故人性别'], ['deceasedBirthDate', '请选择亡故人生辰日期'], ['deceasedBirthTime', '请选择亡故人生辰时间'],
+    ['relationship', '请填写关系'], ['cemetery', '请填写墓地信息'], ['memorialDate', '请选择代祭祀日期'], ['packageName', '请选择祭祀套餐'],
+  ];
+  const missing = required.find(([key]) => !String(createForm[key] || '').trim());
+  if (missing) { message.warning(missing[1]); return false; }
+  if (createForm.customerBirthDate > today || createForm.deceasedBirthDate > today) { message.warning('出生日期不能晚于当天'); return false; }
+  if (createForm.memorialDate < today) { message.warning('代祭祀日期不能早于当天'); return false; }
+  createForm.deceasedBirthDateTime = `${createForm.deceasedBirthDate} ${createForm.deceasedBirthTime}:00`;
+  return true;
+};
+const submitCreate = async () => {
+  if (createSubmitting.value || !validateCreate()) return;
+  createSubmitting.value = true;
+  try {
+    await ancestorApi.createRitualOrder({ ...createForm, packagePrice: Number(createForm.packagePrice) });
+    message.success('代祭祀订单创建成功'); createVisible.value = false; fetchOrders();
+  } catch (error: any) { message.error(error?.message || '创建订单失败'); }
+  finally { createSubmitting.value = false; }
 };
 
 const statusColorMap: Record<string, string> = {
@@ -618,6 +677,7 @@ export default { name: 'AncestorRitualOrders' };
               <Select.Option value="PENDING_VIDEO">待上传视频</Select.Option>
             </Select>
           </div>
+          <Button type="primary" @click="openCreate">后台创建订单</Button>
           <Button type="primary" @click="handleSearch">搜索</Button>
           <Button @click="handleReset">重置</Button>
         </Space>
@@ -689,6 +749,25 @@ export default { name: 'AncestorRitualOrders' };
     </Card>
 
     <!-- 订单详情弹窗 - 使用共享组件 -->
+    <Modal v-model:open="createVisible" title="后台创建代祭祀订单" :confirm-loading="createSubmitting" width="720px" @ok="submitCreate">
+      <p>粘贴订单 JSON 后点击识别，确认字段无误后提交。</p>
+      <Input.TextArea v-model:value="createJson" :rows="10" placeholder="支持完整 JSON，或每行“字段：内容”格式" />
+      <Button type="primary" class="mt-2" @click="parseCreateJson">识别内容</Button>
+      <Descriptions bordered :column="2" class="mt-4">
+        <Descriptions.Item label="阳上人">{{ createForm.customerName }}</Descriptions.Item>
+        <Descriptions.Item label="阳上人性别">{{ createForm.customerGender }}</Descriptions.Item>
+        <Descriptions.Item label="阳上人生辰">{{ createForm.customerBirthDate }}</Descriptions.Item>
+        <Descriptions.Item label="阳上人地址" :span="2">{{ createForm.customerAddress }}</Descriptions.Item>
+        <Descriptions.Item label="亡故人">{{ createForm.deceasedName }}</Descriptions.Item>
+        <Descriptions.Item label="亡故人性别">{{ createForm.deceasedGender }}</Descriptions.Item>
+        <Descriptions.Item label="亡故人生辰">{{ createForm.deceasedBirthDateTime }}</Descriptions.Item>
+        <Descriptions.Item label="关系">{{ createForm.relationship }}</Descriptions.Item>
+        <Descriptions.Item label="墓地" :span="2">{{ createForm.cemetery }}</Descriptions.Item>
+        <Descriptions.Item label="祭祀日期">{{ createForm.memorialDate }}</Descriptions.Item>
+        <Descriptions.Item label="套餐">{{ createForm.packageName }} ¥{{ createForm.packagePrice }}</Descriptions.Item>
+        <Descriptions.Item label="备注" :span="2">{{ createForm.note || '无' }}</Descriptions.Item>
+      </Descriptions>
+    </Modal>
     <OrderDetailModal
       v-model:visible="detailVisible"
       :order="currentOrder"

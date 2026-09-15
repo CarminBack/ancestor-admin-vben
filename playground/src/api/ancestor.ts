@@ -195,6 +195,8 @@ export const ancestorApi = {
     requestClient.post(`/ancestor/product-orders/${id}/confirm-payment`),
 
   // 代祭祀订单
+  createRitualOrder: (data: Record<string, unknown>) =>
+    requestClient.post<RitualOrder>('/ancestor/ritual-orders', data),
   ritualOrders: (params?: Record<string, unknown>) =>
     requestClient.get<{ items: RitualOrder[]; total: number }>('/ancestor/ritual-orders', {
       params,

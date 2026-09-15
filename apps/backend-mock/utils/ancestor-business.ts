@@ -133,8 +133,8 @@ export function page(items: any[], q: Record<string, any>) {
     fail('分页参数无效');
   return { items: items.slice((p - 1) * n, p * n), total: items.length };
 }
-export function createOrder(event: H3Event, type: string) {
-  return respond(event, false, async () => {
+export function createOrder(event: H3Event, type: string, admin = false) {
+  return respond(event, admin, async () => {
     const body = await readBody(event);
     if (!body || typeof body !== 'object' || Array.isArray(body))
       fail('请求体无效');
