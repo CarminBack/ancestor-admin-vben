@@ -486,7 +486,8 @@ export function records(event: H3Event, admin = false) {
       .orders.filter(
         (o) =>
           o.orderType === 'memorial' &&
-          o.status === 'completed' &&
+          // 付款确认后即可查询祭祀记录；取消或尚未付款的订单不公开。
+          ['paid', 'pending_ritual', 'preparing', 'packaging', 'burning', 'pending_video', 'completed'].includes(o.status) &&
           (q.orderNo
             ? o.orderNo === q.orderNo
             : o.customerName === (q.customerName || q.orderName) &&
