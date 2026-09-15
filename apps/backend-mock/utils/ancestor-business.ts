@@ -177,7 +177,6 @@ export function createOrder(event: H3Event, type: string, admin = false) {
         o.cemetery = text(body.cemetery, '墓地信息', 200);
         o.memorialDate = date(body.memorialDate, '祭祀日期');
         notBeforeToday(o.memorialDate, '代祭祀日期');
-        notBeforeToday(o.memorialDate, '代祭祀日期');
         const p = s.packages.find(
           (p) =>
             (body.packageId
@@ -224,8 +223,12 @@ export function createOrder(event: H3Event, type: string, admin = false) {
           fullAddress: `${o.province}${o.city}${o.district}${o.detailAddress}`,
         });
       }
+      if (admin && type === 'memorial') {
+        o.status = 'paid';
+        o.paidAt = o.updatedAt;
+        o.logs.push({ id: randomUUID(), createdAt: o.updatedAt, fromStatus: 'pending_service', toStatus: 'paid', operatorName: '后台管理员', remark: '后台直接创建，默认已付款' });
+      }
       s.orders.unshift(o);
-      if (requestKey) s.requests[requestKey] = { hash, orderNo: o.orderNo };
       return publicOrder(o);
     });
   });
