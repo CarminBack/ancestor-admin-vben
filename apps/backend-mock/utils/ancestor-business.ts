@@ -206,6 +206,8 @@ export function listOrders(event: H3Event, type: string) {
       .orders.filter(
         (o) =>
           o.orderType === type &&
+          (q.orderView !== 'active' || !['pending_service', 'pending_payment', 'cancelled', 'completed'].includes(o.status)) &&
+          (q.orderView !== 'records' || ['completed', 'cancelled'].includes(o.status)) &&
           !(
             type === 'memorial' &&
             q.excludeCompleted === 'true' &&

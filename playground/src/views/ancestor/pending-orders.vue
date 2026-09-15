@@ -3,6 +3,77 @@
     <Card>
       <Tabs v-model:activeKey="activeTab" @change="handleTabChange">
         <!-- 商品订单标签页 -->
+        <TabPane key="ritual" tab="代祭祀订单">
+          <div class="mb-4 flex gap-4">
+            <Input
+              v-model:value="ritualSearch.orderNo"
+              placeholder="订单号"
+              class="w-48"
+              allow-clear
+              @pressEnter="loadRitualOrders"
+            />
+            <Input
+              v-model:value="ritualSearch.orderName"
+              placeholder="下单人姓名"
+              class="w-48"
+              allow-clear
+              @pressEnter="loadRitualOrders"
+            />
+            <Input
+              v-model:value="ritualSearch.deceasedName"
+              placeholder="逝者姓名"
+              class="w-48"
+              allow-clear
+              @pressEnter="loadRitualOrders"
+            />
+            <Button type="primary" @click="loadRitualOrders">
+              <SearchOutlined /> 查询
+            </Button>
+            <Button @click="handleResetRitualSearch">重置</Button>
+          </div>
+
+          <Table
+            :columns="ritualColumns"
+            :data-source="ritualOrders"
+            :loading="ritualLoading"
+            :pagination="ritualPagination"
+            row-key="id"
+            @change="handleRitualTableChange"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'orderInfo'">
+                <div>
+                  <div class="font-medium">{{ record.orderName }}</div>
+                  <div class="text-sm text-gray-500">逝者: {{ record.deceasedName }}</div>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'package'">
+                <div>
+                  <div>{{ record.packageName }}</div>
+                  <div class="text-sm text-gray-500">祭祀日期: {{ record.ritualDate }}</div>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'amount'">
+                <span class="font-semibold text-red-600">¥{{ record.amount }}</span>
+              </template>
+              <template v-else-if="column.key === 'status'">
+                <Tag color="orange">待付款</Tag>
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <Space>
+                  <Button type="primary" size="small" @click="handleConfirmRitualPayment(record)">
+                    确认付款
+                  </Button>
+                  <Button danger size="small" @click="handleCancelOrder(record, 'ritual')">
+                    取消订单
+                  </Button>
+                </Space>
+              </template>
+            </template>
+          </Table>
+        </TabPane>
+
+        <!-- 代祭祀订单标签页 -->
         <TabPane key="product" tab="商品订单">
           <div class="mb-4 flex gap-4">
             <Input
@@ -84,77 +155,6 @@
             </template>
           </Table>
         </TabPane>
-
-        <!-- 代祭祀订单标签页 -->
-        <TabPane key="ritual" tab="代祭祀订单">
-          <div class="mb-4 flex gap-4">
-            <Input
-              v-model:value="ritualSearch.orderNo"
-              placeholder="订单号"
-              class="w-48"
-              allow-clear
-              @pressEnter="loadRitualOrders"
-            />
-            <Input
-              v-model:value="ritualSearch.orderName"
-              placeholder="下单人姓名"
-              class="w-48"
-              allow-clear
-              @pressEnter="loadRitualOrders"
-            />
-            <Input
-              v-model:value="ritualSearch.deceasedName"
-              placeholder="逝者姓名"
-              class="w-48"
-              allow-clear
-              @pressEnter="loadRitualOrders"
-            />
-            <Button type="primary" @click="loadRitualOrders">
-              <SearchOutlined /> 查询
-            </Button>
-            <Button @click="handleResetRitualSearch">重置</Button>
-          </div>
-
-          <Table
-            :columns="ritualColumns"
-            :data-source="ritualOrders"
-            :loading="ritualLoading"
-            :pagination="ritualPagination"
-            row-key="id"
-            @change="handleRitualTableChange"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'orderInfo'">
-                <div>
-                  <div class="font-medium">{{ record.orderName }}</div>
-                  <div class="text-sm text-gray-500">逝者: {{ record.deceasedName }}</div>
-                </div>
-              </template>
-              <template v-else-if="column.key === 'package'">
-                <div>
-                  <div>{{ record.packageName }}</div>
-                  <div class="text-sm text-gray-500">祭祀日期: {{ record.ritualDate }}</div>
-                </div>
-              </template>
-              <template v-else-if="column.key === 'amount'">
-                <span class="font-semibold text-red-600">¥{{ record.amount }}</span>
-              </template>
-              <template v-else-if="column.key === 'status'">
-                <Tag color="orange">待付款</Tag>
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <Space>
-                  <Button type="primary" size="small" @click="handleConfirmRitualPayment(record)">
-                    确认付款
-                  </Button>
-                  <Button danger size="small" @click="handleCancelOrder(record, 'ritual')">
-                    取消订单
-                  </Button>
-                </Space>
-              </template>
-            </template>
-          </Table>
-        </TabPane>
       </Tabs>
     </Card>
   </div>
@@ -167,7 +167,7 @@ import { ancestorApi, type ProductOrder, type RitualOrder } from '#/api/ancestor
 
 const SearchOutlined = () => h('span', { class: 'i-ant-design:search-outlined' });
 
-const activeTab = ref('product');
+const activeTab = ref('ritual');
 
 // 商品订单
 const productOrders = ref<ProductOrder[]>([]);
@@ -360,6 +360,6 @@ const handleTabChange = (key: string) => {
 };
 
 onMounted(() => {
-  loadProductOrders();
+  loadRitualOrders();
 });
 </script>

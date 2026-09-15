@@ -55,11 +55,13 @@ const columns = [
 
 const statusColorMap: Record<string, string> = {
   COMPLETED: 'green',
+  CANCELLED: 'red',
   PENDING_VIDEO: 'purple',
 };
 
 const statusTextMap: Record<string, string> = {
   COMPLETED: '已完成',
+  CANCELLED: '已取消',
   PENDING_VIDEO: '待上传视频',
 };
 
@@ -70,7 +72,7 @@ const fetchRecords = async () => {
   try {
     const res = await ancestorApi.ritualOrders({
       ...searchForm,
-      status: 'COMPLETED', // 只查询已完成的记录
+      orderView: 'records', // 已完成和已取消的订单归档
       page: pagination.current,
       pageSize: pagination.pageSize,
     });

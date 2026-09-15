@@ -126,7 +126,7 @@ const fetchOrders = async () => {
   try {
     const res = await ancestorApi.ritualOrders({
       ...searchForm,
-      excludeCompleted: true,
+      orderView: 'active',
       page: pagination.current,
       pageSize: pagination.pageSize,
     });
